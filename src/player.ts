@@ -68,6 +68,13 @@ export class YouTubePlayer {
     return this.player?.getPlayerState() === YT.PlayerState.PAUSED;
   }
 
+  getProgress(): { current: number; duration: number } | null {
+    if (!this.player) return null;
+    const duration = this.player.getDuration();
+    if (!duration) return null;
+    return { current: this.player.getCurrentTime(), duration };
+  }
+
   destroy(): void {
     this.player?.destroy();
     this.player = null;
