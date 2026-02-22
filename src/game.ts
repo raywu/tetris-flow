@@ -164,7 +164,14 @@ export class Game {
   }
 
   private onPieceMoved(): void {
-    if (this.state.lockDelayActive && this.lockResets < LOCK_DELAY_MAX_RESETS) {
+    if (!this.state.lockDelayActive) return;
+    // If the piece moved to a position where it can fall further (e.g. off a ledge),
+    // cancel lock delay so gravity resumes and piece reaches the real bottom.
+    if (tryMove(this.state, 0, 1) !== null) {
+      this.state.lockDelayActive = false;
+      return;
+    }
+    if (this.lockResets < LOCK_DELAY_MAX_RESETS) {
       this.state.lockDelay = LOCK_DELAY_MS;
       this.lockResets++;
     }
