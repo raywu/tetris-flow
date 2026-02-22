@@ -184,22 +184,13 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     let selector: PreGameScreen | null = null;
 
-    function onEsc(e: KeyboardEvent): void {
-      if (e.code === 'Escape') {
-        closePanel();
-        game.resume();
-      }
-    }
-
     function closePanel(): void {
-      document.removeEventListener('keydown', onEsc);
       selector?.unmount();
       panel.remove();
       document.body.classList.remove('selector-open');
       modalCleanup = null;
     }
 
-    document.addEventListener('keydown', onEsc);
     modalCleanup = closePanel;
 
     selector = new PreGameScreen(panel, (v, videos) => {
@@ -219,6 +210,18 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     selector.mount();
   }
+
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.code !== 'Escape') return;
+    if (modalCleanup) {
+      modalCleanup();
+      game.resume();
+    } else {
+      const phase = game.getState().phase;
+      if (phase === 'playing') game.pause();
+      else if (phase === 'paused') game.resume();
+    }
+  });
 
   game.onPauseChange = (paused) => {
     if (paused) {
