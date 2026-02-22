@@ -73,7 +73,7 @@ function buildGameDOM(): {
       <span>Z    Rotate CCW</span>
       <span>↓    Soft drop</span>
       <span>SPC  Hard drop</span>
-      <span>P    Pause</span>
+      <span>P/ESC  Pause</span>
       <span>R    Restart</span>
     </div>
   `;
@@ -174,7 +174,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     const caret = document.createElement('button');
     caret.className = 'panel-collapse';
-    caret.textContent = '↑';
+    caret.textContent = '^';
 
     header.appendChild(panelTitle);
     header.appendChild(caret);

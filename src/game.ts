@@ -214,7 +214,7 @@ export class Game {
   pause(): void {
     if (this.state.phase === 'playing') {
       this.state.phase = 'paused';
-      this.overlay.innerHTML = '<span class="overlay-title">PAUSED</span><span class="overlay-hint">Press P to resume</span>';
+      this.overlay.innerHTML = '<span class="overlay-title">PAUSED</span><span class="overlay-hint">P or ESC to resume</span>';
       this.overlay.classList.remove('hidden');
       this.onPauseChange?.(true);
     }
