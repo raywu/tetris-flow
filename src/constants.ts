@@ -36,3 +36,5 @@ export const SOFT_DROP_SCORE = 1;  // per cell
 export const HARD_DROP_SCORE = 2;  // per cell
 
 export const LINES_PER_LEVEL = 10;
+
+export const DEBUG = new URLSearchParams(window.location.search).has('debug');

@@ -50,6 +50,8 @@ export class Game {
     this.cleanupInput?.();
   }
 
+  getState(): Readonly<GameState> { return this.state; }
+
   private newGame(): void {
     this.bag = new Bag();
     const firstDef = this.bag.next();

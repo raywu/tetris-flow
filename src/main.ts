@@ -1,5 +1,6 @@
 import './style.css';
 import { Game } from './game.ts';
+import { DEBUG } from './constants.ts';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = '';
@@ -75,3 +76,4 @@ const game = new Game(
 );
 
 game.start();
+if (DEBUG) (window as any).__tetris = game;

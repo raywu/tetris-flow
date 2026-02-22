@@ -1,5 +1,5 @@
 import type { GameState, ActivePiece, TetrominoDef } from './types.ts';
-import { COLS, ROWS, CELL_SIZE, PREVIEW_CELL_SIZE, PREVIEW_CANVAS_SIZE, COLORS, GHOST_ALPHA, CELL_GLOW } from './constants.ts';
+import { COLS, ROWS, CELL_SIZE, PREVIEW_CELL_SIZE, PREVIEW_CANVAS_SIZE, COLORS, GHOST_ALPHA, CELL_GLOW, DEBUG } from './constants.ts';
 import { getCells } from './tetrominoes.ts';
 import { getGhostPiece } from './piece.ts';
 
@@ -26,6 +26,24 @@ export class Renderer {
       this.drawPiece(state.current, false);
     }
     this.drawPreview(state.next);
+    if (DEBUG) this.drawDebugOverlay(state);
+  }
+
+  private drawDebugOverlay(s: GameState): void {
+    const lines = [
+      `phase: ${s.phase}`,
+      `pos: ${s.current.pos.x}, ${s.current.pos.y}  rot: ${s.current.rotation}`,
+      `lockDelay: ${s.lockDelay.toFixed(0)}ms  active: ${s.lockDelayActive}`,
+      `dropAccum: ${s.dropAccumulator.toFixed(1)}`,
+      `level: ${s.level}  lines: ${s.lines}  score: ${s.score}`,
+    ];
+    this.ctx.save();
+    this.ctx.font = '11px monospace';
+    this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    this.ctx.fillRect(0, 0, 200, lines.length * 14 + 8);
+    this.ctx.fillStyle = '#00ff88';
+    lines.forEach((line, i) => this.ctx.fillText(line, 4, 14 + i * 14));
+    this.ctx.restore();
   }
 
   private clearBoard(): void {
