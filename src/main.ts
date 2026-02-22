@@ -2,6 +2,10 @@ import './style.css';
 import { Game } from './game.ts';
 import { DEBUG } from './constants.ts';
 
+if ((import.meta as any).env.DEV) {
+  import('./debug.ts').then(({ mountDebugOverlay }) => mountDebugOverlay());
+}
+
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = '';
 
