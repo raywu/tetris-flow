@@ -108,6 +108,7 @@ export class PreGameScreen {
         return `
           <div class="pregame-search-row">
             <input class="pregame-search" id="pg-search" type="text" placeholder="Search YouTube..." />
+            ${this.token ? `<button class="btn btn-ghost" id="pg-refresh" title="Refresh recommendations">↺</button>` : ''}
           </div>
           ${this.videos.length > 0
             ? `<div class="rec-grid">${this.videos.map(v => this.buildCard(v)).join('')}</div>`
@@ -143,6 +144,10 @@ export class PreGameScreen {
     this.el?.querySelector('#pg-signin')?.addEventListener('click', () => this.handleSignIn());
     this.el?.querySelector('#pg-skip')?.addEventListener('click', () => this.onStart(null, this.videos));
     this.el?.querySelector('#pg-retry')?.addEventListener('click', () => this.setState('idle'));
+    this.el?.querySelector('#pg-refresh')?.addEventListener('click', () => {
+      this.setState('loading');
+      this.loadRecommendations();
+    });
 
     this.el?.querySelectorAll('.rec-card').forEach(card => {
       card.addEventListener('click', () => {
