@@ -25,6 +25,8 @@ body {
   justify-content: center;
 }
 
+body.selector-open { align-items: flex-start; }
+
 #app {
   width: 100%;
 }
@@ -407,33 +409,54 @@ body {
   color: var(--text-dim);
 }
 
-/* ── Video selector modal ────────────────────────────── */
-.video-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(13, 13, 20, 0.94);
-  backdrop-filter: blur(4px);
-  z-index: 100;
-  overflow-y: auto;
+/* ── Video selector panel ────────────────────────────── */
+.video-panel {
+  width: 100%;
+  background: var(--bg-panel);
+  border-top: 2px solid var(--bg-border);
 }
 
-.modal-close {
-  position: fixed;
-  top: 20px;
-  right: 24px;
+.video-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--bg-border);
+}
+
+.video-panel-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.panel-collapse {
   background: transparent;
   border: 1px solid var(--bg-border);
   color: var(--text-dim);
   font-family: var(--font);
-  font-size: 0.9rem;
-  padding: 6px 10px;
+  font-size: 0.85rem;
+  padding: 4px 10px;
   cursor: pointer;
-  z-index: 101;
   transition: color 0.15s;
 }
 
-.modal-close:hover {
-  color: var(--text-hi);
+.panel-collapse:hover { color: var(--text-hi); }
+
+.video-panel .pregame {
+  min-height: 0;
+  padding: 16px;
+  align-items: flex-start;
+}
+
+.video-panel .pregame-title,
+.video-panel .pregame-sub {
+  display: none;
 }
 
 /* ── Pre-game error state ───────────────────────────── */

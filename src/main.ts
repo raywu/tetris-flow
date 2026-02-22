@@ -162,37 +162,59 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   function openVideoSelector(): void {
     if (modalCleanup) return; // already open
 
-    const modal = document.createElement('div');
-    modal.className = 'video-modal';
+    const panel = document.createElement('div');
+    panel.className = 'video-panel';
 
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'modal-close';
-    closeBtn.textContent = '✕';
-    modal.appendChild(closeBtn);
-    app.appendChild(modal);
+    const header = document.createElement('div');
+    header.className = 'video-panel-header';
 
-    function closeModal(): void {
-      selector.unmount();
-      modal.remove();
+    const panelTitle = document.createElement('span');
+    panelTitle.className = 'video-panel-title';
+    panelTitle.textContent = 'Select Video';
+
+    const caret = document.createElement('button');
+    caret.className = 'panel-collapse';
+    caret.textContent = '↑';
+
+    header.appendChild(panelTitle);
+    header.appendChild(caret);
+    panel.appendChild(header);
+    gameContainer.appendChild(panel);
+    document.body.classList.add('selector-open');
+
+    let selector: PreGameScreen | null = null;
+
+    function onEsc(e: KeyboardEvent): void {
+      if (e.code === 'Escape') {
+        closePanel();
+        game.resume();
+      }
+    }
+
+    function closePanel(): void {
+      document.removeEventListener('keydown', onEsc);
+      selector?.unmount();
+      panel.remove();
+      document.body.classList.remove('selector-open');
       modalCleanup = null;
     }
 
-    modalCleanup = closeModal;
+    document.addEventListener('keydown', onEsc);
+    modalCleanup = closePanel;
 
-    // skipLabel omitted → "Stop audio" button hidden (commented out by design)
-    const selector = new PreGameScreen(modal, (v, videos) => {
-      audioPausedByGame = false; // don't resume old audio
-      closeModal();
-      game.resume(); // onPauseChange(false) fires: flag is clear so no play(); modal already gone
+    selector = new PreGameScreen(panel, (v, videos) => {
+      audioPausedByGame = false;
+      closePanel();
+      game.resume();
       if (v) {
         videoList = videos;
         mountVideo(v);
       }
-    });
+    }, undefined, videoList);
 
-    closeBtn.addEventListener('click', () => {
-      closeModal();
-      game.resume(); // onPauseChange(false) fires: resumes audio if audioPausedByGame
+    caret.addEventListener('click', () => {
+      closePanel();
+      game.resume();
     });
 
     selector.mount();

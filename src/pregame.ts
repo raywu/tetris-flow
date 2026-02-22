@@ -16,6 +16,7 @@ export class PreGameScreen {
   private container: HTMLElement;
   private onStart: (video: YouTubeVideo | null, videos: YouTubeVideo[]) => void;
   private skipLabel: string | undefined;
+  private initialVideos: YouTubeVideo[] | undefined;
   private el: HTMLElement | null = null;
   private state: State = 'idle';
   private videos: YouTubeVideo[] = [];
@@ -26,15 +27,27 @@ export class PreGameScreen {
     container: HTMLElement,
     onStart: (video: YouTubeVideo | null, videos: YouTubeVideo[]) => void,
     skipLabel?: string,
+    initialVideos?: YouTubeVideo[],
   ) {
     this.container = container;
     this.onStart = onStart;
     this.skipLabel = skipLabel;
+    this.initialVideos = initialVideos;
   }
 
   mount(): void {
     this.el = document.createElement('div');
     this.el.className = 'pregame';
+
+    if (this.initialVideos?.length) {
+      this.videos = this.initialVideos;
+      this.state = 'ready';
+      const t = getToken();
+      if (t) this.token = t;
+      this.render();
+      this.container.appendChild(this.el);
+      return;
+    }
 
     const existing = getToken();
     if (existing) {
