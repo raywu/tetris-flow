@@ -33,3 +33,20 @@ export interface GameState {
   lockDelay: number;
   lockDelayActive: boolean;
 }
+
+export interface Subscription {
+  channelId: string;
+  title: string;
+  description: string;
+}
+
+export interface YouTubeVideo {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnailUrl: string;
+  durationSeconds: number;
+  categoryId: string;
+}
+
+export type AppPhase = 'pregame' | 'playing';

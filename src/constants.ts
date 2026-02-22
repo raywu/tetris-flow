@@ -38,3 +38,14 @@ export const HARD_DROP_SCORE = 2;  // per cell
 export const LINES_PER_LEVEL = 10;
 
 export const DEBUG = new URLSearchParams(window.location.search).has('debug');
+
+export const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+export const AUDIO_FRIENDLY_KEYWORDS = [
+  'interview', 'lecture', 'podcast', 'talk', 'explained',
+  'course', 'audiobook', 'discussion', 'conversation', 'documentary',
+];
+
+export const AUDIO_FRIENDLY_CATEGORY_IDS = ['27', '28', '25']; // Education, Science & Tech, News & Politics
+
+export const MIN_AUDIO_DURATION_SECONDS = 20 * 60; // 20 minutes
