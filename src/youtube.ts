@@ -1,5 +1,6 @@
 import type { Subscription, YouTubeVideo } from './types.ts';
 import { YOUTUBE_API_BASE } from './constants.ts';
+import { getCached, setCached } from './cache.ts';
 
 function parseDuration(iso: string): number {
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -50,12 +51,24 @@ export async function searchVideos(token: string, query: string): Promise<YouTub
 }
 
 export async function fetchVideoDetails(token: string, videoIds: string[]): Promise<YouTubeVideo[]> {
+  const PREFIX = 'yt_video_';
+  const cached: YouTubeVideo[] = [];
+  const missing: string[] = [];
+
+  for (const id of videoIds) {
+    const hit = getCached<YouTubeVideo>(`${PREFIX}${id}`, Infinity, sessionStorage);
+    if (hit) cached.push(hit);
+    else missing.push(id);
+  }
+
+  if (missing.length === 0) return cached;
+
   const data = await apiFetch(token, 'videos', {
     part: 'snippet,contentDetails',
-    id: videoIds.join(','),
+    id: missing.join(','),
   });
 
-  return (data.items ?? []).map((item: any) => ({
+  const fetched: YouTubeVideo[] = (data.items ?? []).map((item: any) => ({
     videoId: item.id,
     title: item.snippet.title,
     channelTitle: item.snippet.channelTitle,
@@ -63,4 +76,10 @@ export async function fetchVideoDetails(token: string, videoIds: string[]): Prom
     durationSeconds: parseDuration(item.contentDetails?.duration ?? ''),
     categoryId: item.snippet.categoryId ?? '',
   }));
+
+  for (const video of fetched) {
+    setCached(`${PREFIX}${video.videoId}`, video, sessionStorage);
+  }
+
+  return [...cached, ...fetched];
 }

@@ -1,7 +1,12 @@
 import type { YouTubeVideo } from './types.ts';
+import type { Subscription } from './types.ts';
 import { signIn, getToken } from './auth.ts';
 import { fetchSubscriptions, searchVideos } from './youtube.ts';
 import { buildRecommendations } from './recommendations.ts';
+import { getCached, setCached } from './cache.ts';
+
+const TTL_RECS = 24 * 60 * 60 * 1000;
+const TTL_SUBS = 7 * 24 * 60 * 60 * 1000;
 
 type State = 'idle' | 'signing-in' | 'loading' | 'ready' | 'error';
 
@@ -146,7 +151,7 @@ export class PreGameScreen {
     this.el?.querySelector('#pg-retry')?.addEventListener('click', () => this.setState('idle'));
     this.el?.querySelector('#pg-refresh')?.addEventListener('click', () => {
       this.setState('loading');
-      this.loadRecommendations();
+      this.loadRecommendations(true);
     });
 
     this.el?.querySelectorAll('.rec-card').forEach(card => {
@@ -179,10 +184,25 @@ export class PreGameScreen {
     }
   }
 
-  private async loadRecommendations(): Promise<void> {
+  private async loadRecommendations(forceRefresh = false): Promise<void> {
     try {
-      const subs = await fetchSubscriptions(this.token!);
+      if (forceRefresh) localStorage.removeItem('yt_recommendations');
+
+      const recsCached = getCached<YouTubeVideo[]>('yt_recommendations', TTL_RECS);
+      if (recsCached) {
+        this.videos = recsCached;
+        this.setState('ready');
+        return;
+      }
+
+      let subs = getCached<Subscription[]>('yt_subscriptions', TTL_SUBS);
+      if (!subs) {
+        subs = await fetchSubscriptions(this.token!);
+        setCached('yt_subscriptions', subs);
+      }
+
       this.videos = await buildRecommendations(this.token!, subs);
+      setCached('yt_recommendations', this.videos);
       this.setState('ready');
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : 'Failed to load recommendations';
@@ -192,7 +212,15 @@ export class PreGameScreen {
 
   private async handleSearch(query: string): Promise<void> {
     if (!query || !this.token) return;
+    const cacheKey = `yt_search_${query}`;
+    const cached = getCached<YouTubeVideo[]>(cacheKey, Infinity, sessionStorage);
+    if (cached) {
+      this.videos = cached;
+      this.render();
+      return;
+    }
     const results = await searchVideos(this.token, query);
+    setCached(cacheKey, results, sessionStorage);
     this.videos = results;
     this.render();
   }
