@@ -1,9 +1,9 @@
 import type { YouTubeVideo } from './types.ts';
-import { signIn } from './auth.ts';
+import { signIn, getToken } from './auth.ts';
 import { fetchSubscriptions, searchVideos } from './youtube.ts';
 import { buildRecommendations } from './recommendations.ts';
 
-type State = 'idle' | 'signing-in' | 'loading' | 'ready';
+type State = 'idle' | 'signing-in' | 'loading' | 'ready' | 'error';
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -14,22 +14,40 @@ function formatDuration(seconds: number): string {
 
 export class PreGameScreen {
   private container: HTMLElement;
-  private onStart: (video: YouTubeVideo | null) => void;
+  private onStart: (video: YouTubeVideo | null, videos: YouTubeVideo[]) => void;
+  private skipLabel: string | undefined;
   private el: HTMLElement | null = null;
   private state: State = 'idle';
   private videos: YouTubeVideo[] = [];
   private token: string | null = null;
+  private errorMessage = '';
 
-  constructor(container: HTMLElement, onStart: (video: YouTubeVideo | null) => void) {
+  constructor(
+    container: HTMLElement,
+    onStart: (video: YouTubeVideo | null, videos: YouTubeVideo[]) => void,
+    skipLabel?: string,
+  ) {
     this.container = container;
     this.onStart = onStart;
+    this.skipLabel = skipLabel;
   }
 
   mount(): void {
     this.el = document.createElement('div');
     this.el.className = 'pregame';
+
+    const existing = getToken();
+    if (existing) {
+      this.token = existing;
+      this.state = 'loading';
+    }
+
     this.render();
     this.container.appendChild(this.el);
+
+    if (existing) {
+      this.loadRecommendations();
+    }
   }
 
   unmount(): void {
@@ -59,7 +77,7 @@ export class PreGameScreen {
         return `
           <div class="pregame-actions">
             <button class="btn btn-primary" id="pg-signin">Sign in with Google</button>
-            <button class="btn btn-ghost" id="pg-skip">Play without audio</button>
+            ${this.skipLabel ? `<button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button>` : ''}
           </div>
         `;
 
@@ -70,9 +88,7 @@ export class PreGameScreen {
             <span class="spinner"></span>
             <span>${this.state === 'signing-in' ? 'Signing in...' : 'Finding recommendations...'}</span>
           </div>
-          <div class="pregame-actions">
-            <button class="btn btn-ghost" id="pg-skip">Skip</button>
-          </div>
+          ${this.skipLabel ? `<div class="pregame-actions"><button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button></div>` : ''}
         `;
 
       case 'ready':
@@ -84,9 +100,16 @@ export class PreGameScreen {
             ? `<div class="rec-grid">${this.videos.map(v => this.buildCard(v)).join('')}</div>`
             : `<p class="pregame-status">No recommendations found. Search above or skip.</p>`
           }
-          <div class="pregame-actions">
-            <button class="btn btn-ghost" id="pg-skip">Play without audio</button>
+          ${this.skipLabel ? `<div class="pregame-actions"><button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button></div>` : ''}
+        `;
+
+      case 'error':
+        return `
+          <div class="pregame-error">
+            <span class="pregame-error-msg">${this.errorMessage}</span>
+            <button class="btn btn-ghost" id="pg-retry">Try again</button>
           </div>
+          ${this.skipLabel ? `<div class="pregame-actions"><button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button></div>` : ''}
         `;
     }
   }
@@ -105,13 +128,14 @@ export class PreGameScreen {
 
   private attachListeners(): void {
     this.el?.querySelector('#pg-signin')?.addEventListener('click', () => this.handleSignIn());
-    this.el?.querySelector('#pg-skip')?.addEventListener('click', () => this.onStart(null));
+    this.el?.querySelector('#pg-skip')?.addEventListener('click', () => this.onStart(null, this.videos));
+    this.el?.querySelector('#pg-retry')?.addEventListener('click', () => this.setState('idle'));
 
     this.el?.querySelectorAll('.rec-card').forEach(card => {
       card.addEventListener('click', () => {
         const videoId = (card as HTMLElement).dataset.videoId!;
         const video = this.videos.find(v => v.videoId === videoId) ?? null;
-        this.onStart(video);
+        this.onStart(video, this.videos);
       });
     });
 
@@ -130,12 +154,21 @@ export class PreGameScreen {
     try {
       this.token = await signIn();
       this.setState('loading');
-      const subs = await fetchSubscriptions(this.token);
-      this.videos = await buildRecommendations(this.token, subs);
+      await this.loadRecommendations();
+    } catch (err) {
+      this.errorMessage = err instanceof Error ? err.message : 'Sign-in failed';
+      this.setState('error');
+    }
+  }
+
+  private async loadRecommendations(): Promise<void> {
+    try {
+      const subs = await fetchSubscriptions(this.token!);
+      this.videos = await buildRecommendations(this.token!, subs);
       this.setState('ready');
     } catch (err) {
-      console.error('Sign-in failed:', err);
-      this.setState('idle');
+      this.errorMessage = err instanceof Error ? err.message : 'Failed to load recommendations';
+      this.setState('error');
     }
   }
 
