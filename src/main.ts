@@ -11,10 +11,17 @@ if ((import.meta as any).env.DEV) {
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function buildGameDOM(): {
   wrapper: HTMLElement;
   boardCanvas: HTMLCanvasElement;
-  previewCanvas: HTMLCanvasElement;
   overlay: HTMLElement;
   scoreEl: HTMLElement;
   levelEl: HTMLElement;
@@ -78,7 +85,6 @@ function buildGameDOM(): {
   return {
     wrapper,
     boardCanvas,
-    previewCanvas: boardCanvas, // placeholder; resolved after DOM append
     overlay,
     scoreEl: leftHud.querySelector('#score')!,
     levelEl: leftHud.querySelector('#level')!,
@@ -89,23 +95,30 @@ function buildGameDOM(): {
 function buildMiniPlayer(video: YouTubeVideo): {
   bar: HTMLElement;
   playPauseBtn: HTMLButtonElement;
+  skipBtn: HTMLButtonElement;
 } {
   const bar = document.createElement('div');
   bar.className = 'mini-player';
   bar.innerHTML = `
+    <div class="mini-progress"><div class="mini-progress-fill"></div></div>
     <img class="mini-thumb" src="${video.thumbnailUrl}" alt="" />
     <div class="mini-info">
       <span class="mini-title">${video.title}</span>
-      <span class="mini-channel">${video.channelTitle}</span>
+      <span class="mini-channel">${video.channelTitle} &middot; <span class="mini-time">--:--</span></span>
     </div>
     <div class="mini-controls">
-      <button class="mini-btn" id="mini-playpause" title="Play/Pause">⏸</button>
+      <button class="mini-btn" id="mini-playpause" title="Play/Pause" disabled>⏸</button>
+      <button class="mini-btn" id="mini-skip" title="Next video">⏭</button>
     </div>
   `;
-  return { bar, playPauseBtn: bar.querySelector('#mini-playpause')! };
+  return {
+    bar,
+    playPauseBtn: bar.querySelector<HTMLButtonElement>('#mini-playpause')!,
+    skipBtn: bar.querySelector<HTMLButtonElement>('#mini-skip')!,
+  };
 }
 
-function startGame(video: YouTubeVideo | null): void {
+function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[]): void {
   app.innerHTML = '';
 
   const gameContainer = document.createElement('div');
@@ -113,52 +126,163 @@ function startGame(video: YouTubeVideo | null): void {
 
   const { wrapper, boardCanvas, overlay, scoreEl, levelEl, linesEl } = buildGameDOM();
   gameContainer.appendChild(wrapper);
-
-  let ytPlayer: YouTubePlayer | null = null;
-
-  if (video) {
-    const { bar, playPauseBtn } = buildMiniPlayer(video);
-    gameContainer.appendChild(bar);
-
-    ytPlayer = new YouTubePlayer(
-      video.videoId,
-      () => {},
-      () => {},
-    );
-
-    playPauseBtn.addEventListener('click', () => {
-      if (ytPlayer!.isPaused()) {
-        ytPlayer!.play();
-        playPauseBtn.textContent = '⏸';
-      } else {
-        ytPlayer!.pause();
-        playPauseBtn.textContent = '▶';
-      }
-    });
-  }
-
   app.appendChild(gameContainer);
 
   const previewCanvas = wrapper.querySelector<HTMLCanvasElement>('#preview')!;
+  const game = new Game(boardCanvas, previewCanvas, scoreEl, levelEl, linesEl, overlay);
 
-  const game = new Game(
-    boardCanvas,
-    previewCanvas,
-    scoreEl,
-    levelEl,
-    linesEl,
-    overlay,
-  );
+  let ytPlayer: YouTubePlayer | null = null;
+  let progressInterval: ReturnType<typeof setInterval> | null = null;
+  let miniBar: HTMLElement | null = null;
+  let videoList: YouTubeVideo[] = initialList;
+  let currentVideoId: string | null = null;
+  let audioPausedByGame = false;
+  let modalCleanup: (() => void) | null = null;
+
+  function clearProgress(): void {
+    if (progressInterval !== null) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+  }
+
+  function startProgress(bar: HTMLElement): void {
+    clearProgress();
+    progressInterval = setInterval(() => {
+      const prog = ytPlayer?.getProgress();
+      if (!prog) return;
+      const pct = prog.duration > 0 ? (prog.current / prog.duration) * 100 : 0;
+      const fill = bar.querySelector<HTMLElement>('.mini-progress-fill');
+      const timeEl = bar.querySelector<HTMLElement>('.mini-time');
+      if (fill) fill.style.width = `${pct}%`;
+      if (timeEl) timeEl.textContent = `${formatTime(prog.current)} / ${formatTime(prog.duration)}`;
+    }, 1000);
+  }
+
+  function openVideoSelector(): void {
+    if (modalCleanup) return; // already open
+
+    const modal = document.createElement('div');
+    modal.className = 'video-modal';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'modal-close';
+    closeBtn.textContent = '✕';
+    modal.appendChild(closeBtn);
+    app.appendChild(modal);
+
+    function closeModal(): void {
+      selector.unmount();
+      modal.remove();
+      modalCleanup = null;
+    }
+
+    modalCleanup = closeModal;
+
+    // skipLabel omitted → "Stop audio" button hidden (commented out by design)
+    const selector = new PreGameScreen(modal, (v, videos) => {
+      audioPausedByGame = false; // don't resume old audio
+      closeModal();
+      game.resume(); // onPauseChange(false) fires: flag is clear so no play(); modal already gone
+      if (v) {
+        videoList = videos;
+        mountVideo(v);
+      }
+    });
+
+    closeBtn.addEventListener('click', () => {
+      closeModal();
+      game.resume(); // onPauseChange(false) fires: resumes audio if audioPausedByGame
+    });
+
+    selector.mount();
+  }
+
+  game.onPauseChange = (paused) => {
+    if (paused) {
+      if (ytPlayer && !ytPlayer.isPaused()) {
+        ytPlayer.pause();
+        audioPausedByGame = true;
+      }
+      openVideoSelector();
+    } else {
+      if (audioPausedByGame) {
+        ytPlayer?.play();
+        audioPausedByGame = false;
+      }
+      modalCleanup?.();
+      modalCleanup = null;
+    }
+  };
+
+  function showEnded(bar: HTMLElement): void {
+    clearProgress();
+    const fill = bar.querySelector<HTMLElement>('.mini-progress-fill');
+    if (fill) fill.style.width = '100%';
+    const timeEl = bar.querySelector<HTMLElement>('.mini-time');
+    if (timeEl) timeEl.textContent = 'Finished';
+
+    const controls = bar.querySelector<HTMLElement>('.mini-controls');
+    if (controls) {
+      controls.innerHTML = '<button class="mini-btn mini-btn-text" id="mini-change-end">Change video</button>';
+      controls.querySelector('#mini-change-end')?.addEventListener('click', () => {
+        if (game.getState().phase === 'playing') {
+          game.pause(); // triggers onPauseChange(true) → openVideoSelector
+        } else {
+          openVideoSelector(); // game over or already paused
+        }
+      });
+    }
+  }
+
+  function mountVideo(video: YouTubeVideo): void {
+    ytPlayer?.destroy();
+    clearProgress();
+    miniBar?.remove();
+
+    currentVideoId = video.videoId;
+
+    const built = buildMiniPlayer(video);
+    miniBar = built.bar;
+    gameContainer.appendChild(miniBar);
+
+    ytPlayer = new YouTubePlayer(
+      video.videoId,
+      () => {
+        built.playPauseBtn.disabled = false;
+        startProgress(built.bar);
+      },
+      () => showEnded(built.bar),
+    );
+
+    built.playPauseBtn.addEventListener('click', () => {
+      if (ytPlayer!.isPaused()) {
+        ytPlayer!.play();
+        built.playPauseBtn.textContent = '⏸';
+      } else {
+        ytPlayer!.pause();
+        built.playPauseBtn.textContent = '▶';
+      }
+    });
+
+    built.skipBtn.addEventListener('click', () => {
+      if (videoList.length === 0) return;
+      const idx = videoList.findIndex(v => v.videoId === currentVideoId);
+      const next = videoList[(idx + 1) % videoList.length];
+      if (next) mountVideo(next);
+    });
+  }
 
   game.start();
+  if (initialVideo) mountVideo(initialVideo);
   if (DEBUG) (window as any).__tetris = game;
 }
 
 function init(): void {
-  const pregame = new PreGameScreen(app, (video) => {
+  const pregame = new PreGameScreen(app, (video, videos) => {
     pregame.unmount();
-    startGame(video);
-  });
+    startGame(video, videos);
+  }, 'Play without audio');
   pregame.mount();
 }
 

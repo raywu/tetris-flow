@@ -8,6 +8,8 @@ import { calculateLineScore, calculateHardDropScore, calculateSoftDropScore, cal
 import { LOCK_DELAY_MS, LOCK_DELAY_MAX_RESETS } from './constants.ts';
 
 export class Game {
+  onPauseChange: ((paused: boolean) => void) | null = null;
+
   private state!: GameState;
   private bag!: Bag;
   private readonly renderer: Renderer;
@@ -209,17 +211,28 @@ export class Game {
     return { def, rotation: 0, pos: { x: 3, y: -1 } };
   }
 
-  private togglePause(): void {
+  pause(): void {
     if (this.state.phase === 'playing') {
       this.state.phase = 'paused';
       this.overlay.innerHTML = '<span class="overlay-title">PAUSED</span><span class="overlay-hint">Press P to resume</span>';
       this.overlay.classList.remove('hidden');
-    } else if (this.state.phase === 'paused') {
+      this.onPauseChange?.(true);
+    }
+  }
+
+  resume(): void {
+    if (this.state.phase === 'paused') {
       this.state.phase = 'playing';
       this.overlay.innerHTML = '';
       this.overlay.classList.add('hidden');
-      this.lastTimestamp = performance.now(); // reset dt to avoid time jump
+      this.lastTimestamp = performance.now();
+      this.onPauseChange?.(false);
     }
+  }
+
+  private togglePause(): void {
+    if (this.state.phase === 'playing') this.pause();
+    else if (this.state.phase === 'paused') this.resume();
   }
 
   private showGameOver(): void {
