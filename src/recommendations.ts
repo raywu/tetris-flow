@@ -42,15 +42,21 @@ function selectRelevantChannels(
   n: number
 ): Subscription[] {
   const topicSet = new Set(topics);
-  return subs
+  const scored = subs
     .map(sub => {
       const tokens = sub.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
       const score = tokens.filter(t => topicSet.has(t)).length;
       return { sub, score };
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .map(x => x.sub);
+    .slice(0, n * 2);
+
+  for (let i = scored.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [scored[i], scored[j]] = [scored[j], scored[i]];
+  }
+
+  return scored.slice(0, n).map(x => x.sub);
 }
 
 export function isAudioFriendly(video: YouTubeVideo): boolean {

@@ -68,6 +68,14 @@ export class YouTubePlayer {
     return this.player?.getPlayerState() === YT.PlayerState.PAUSED;
   }
 
+  seekTo(seconds: number): void {
+    this.player?.seekTo(Math.max(0, seconds), true);
+  }
+
+  setPlaybackRate(rate: number): void {
+    this.player?.setPlaybackRate(rate);
+  }
+
   getProgress(): { current: number; duration: number } | null {
     if (!this.player) return null;
     const duration = this.player.getDuration();

@@ -332,8 +332,14 @@ body.selector-open { align-items: flex-start; }
   bottom: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 4px;
   background: var(--bg-border);
+  cursor: pointer;
+  transition: height 0.1s;
+}
+
+.mini-progress:hover {
+  height: 6px;
 }
 
 .mini-progress-fill {
@@ -348,6 +354,11 @@ body.selector-open { align-items: flex-start; }
   height: 32px;
   object-fit: cover;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mini-thumb:hover {
+  opacity: 0.8;
 }
 
 .mini-info {
@@ -364,6 +375,11 @@ body.selector-open { align-items: flex-start; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.mini-title:hover {
+  color: var(--accent);
 }
 
 .mini-channel {
@@ -375,6 +391,7 @@ body.selector-open { align-items: flex-start; }
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .mini-btn {
@@ -395,6 +412,10 @@ body.selector-open { align-items: flex-start; }
 .mini-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.mini-btn svg {
+  display: block;
 }
 
 .mini-btn-text {

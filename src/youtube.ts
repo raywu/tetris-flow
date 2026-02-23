@@ -21,6 +21,27 @@ async function apiFetch(token: string, path: string, params: Record<string, stri
   return res.json();
 }
 
+async function apiPost(token: string, path: string, params: Record<string, string>, body: object): Promise<any> {
+  const url = new URL(`${YOUTUBE_API_BASE}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`YouTube API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function addToWatchLater(token: string, videoId: string): Promise<void> {
+  await apiPost(token, 'playlistItems', { part: 'snippet' }, {
+    snippet: {
+      playlistId: 'WL',
+      resourceId: { kind: 'youtube#video', videoId },
+    },
+  });
+}
+
 export async function fetchSubscriptions(token: string): Promise<Subscription[]> {
   const data = await apiFetch(token, 'subscriptions', {
     part: 'snippet',

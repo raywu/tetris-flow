@@ -38,13 +38,13 @@ index.html          # app shell
 ## YouTube Integration
 
 - OAuth via Google Identity Services (GIS); token persisted in `sessionStorage`
-- Recommendations built from subscription topics → `search.list` → `videos.list`, filtered for audio-friendly long-form content
+- Recommendations built from subscription topics → `playlistItems.list` → `videos.list`, filtered for audio-friendly long-form content
 - YouTube IFrame Player API loaded dynamically; player sits behind the game canvas
 - Video change flow: pause game → show pregame panel → select or search → resume
 
 ## API Quota
 
-YouTube Data API v3 quota: **10,000 units/day**. Costs per cold session start: ~405 units (400 from `search.list` × 4 calls). Caching is critical.
+YouTube Data API v3 quota: **10,000 units/day**. Costs per cold session start: ~27 units (`playlistItems.list` per channel). Caching is critical.
 
 ### Caching strategy (`src/cache.ts`)
 

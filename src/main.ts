@@ -3,11 +3,16 @@ import { Game } from './game.ts';
 import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
+import { addToWatchLater } from './youtube.ts';
+import { getToken } from './auth.ts';
 import type { YouTubeVideo } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
   import('./debug.ts').then(({ mountDebugOverlay }) => mountDebugOverlay());
 }
+
+const BOOKMARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>`;
+const EXTERNAL_LINK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -94,8 +99,15 @@ function buildGameDOM(): {
 
 function buildMiniPlayer(video: YouTubeVideo): {
   bar: HTMLElement;
+  seekBackBtn: HTMLButtonElement;
+  seekFwdBtn: HTMLButtonElement;
+  speedBtn: HTMLButtonElement;
   playPauseBtn: HTMLButtonElement;
   skipBtn: HTMLButtonElement;
+  saveBtn: HTMLButtonElement;
+  openBtn: HTMLButtonElement;
+  thumbEl: HTMLImageElement;
+  titleEl: HTMLElement;
 } {
   const bar = document.createElement('div');
   bar.className = 'mini-player';
@@ -107,14 +119,26 @@ function buildMiniPlayer(video: YouTubeVideo): {
       <span class="mini-channel">${video.channelTitle} &middot; <span class="mini-time">--:--</span></span>
     </div>
     <div class="mini-controls">
+      <button class="mini-btn" id="mini-seek-back" title="Back 10s" disabled>«10</button>
+      <button class="mini-btn" id="mini-seek-fwd" title="Forward 10s" disabled>10»</button>
+      <button class="mini-btn" id="mini-speed" title="Playback speed" disabled>1×</button>
       <button class="mini-btn" id="mini-playpause" title="Play/Pause" disabled>⏸</button>
       <button class="mini-btn" id="mini-skip" title="Next video">⏭</button>
+      <button class="mini-btn" id="mini-save" title="Save to Watch Later">${BOOKMARK_SVG}</button>
+      <button class="mini-btn" id="mini-open" title="Open on YouTube">${EXTERNAL_LINK_SVG}</button>
     </div>
   `;
   return {
     bar,
+    seekBackBtn: bar.querySelector<HTMLButtonElement>('#mini-seek-back')!,
+    seekFwdBtn: bar.querySelector<HTMLButtonElement>('#mini-seek-fwd')!,
+    speedBtn: bar.querySelector<HTMLButtonElement>('#mini-speed')!,
     playPauseBtn: bar.querySelector<HTMLButtonElement>('#mini-playpause')!,
     skipBtn: bar.querySelector<HTMLButtonElement>('#mini-skip')!,
+    saveBtn: bar.querySelector<HTMLButtonElement>('#mini-save')!,
+    openBtn: bar.querySelector<HTMLButtonElement>('#mini-open')!,
+    thumbEl: bar.querySelector<HTMLImageElement>('.mini-thumb')!,
+    titleEl: bar.querySelector<HTMLElement>('.mini-title')!,
   };
 }
 
@@ -134,6 +158,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let ytPlayer: YouTubePlayer | null = null;
   let progressInterval: ReturnType<typeof setInterval> | null = null;
   let miniBar: HTMLElement | null = null;
+  let dragController: AbortController | null = null;
   let videoList: YouTubeVideo[] = initialList;
   let currentVideoId: string | null = null;
   let audioPausedByGame = false;
@@ -223,13 +248,15 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     }
   });
 
+  let suppressSelector = false;
+
   game.onPauseChange = (paused) => {
     if (paused) {
       if (ytPlayer && !ytPlayer.isPaused()) {
         ytPlayer.pause();
         audioPausedByGame = true;
       }
-      openVideoSelector();
+      if (!suppressSelector) openVideoSelector();
     } else {
       if (audioPausedByGame) {
         ytPlayer?.play();
@@ -239,6 +266,18 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       modalCleanup = null;
     }
   };
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return;
+    if (game.getState().phase === 'playing') {
+      suppressSelector = true;
+      game.pause();
+      suppressSelector = false;
+    } else if (ytPlayer && !ytPlayer.isPaused()) {
+      ytPlayer.pause();
+      audioPausedByGame = true;
+    }
+  });
 
   function showEnded(bar: HTMLElement): void {
     clearProgress();
@@ -260,12 +299,19 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     }
   }
 
+  const SPEED_RATES = [0.75, 1, 1.25, 1.5, 2];
+
   function mountVideo(video: YouTubeVideo): void {
     ytPlayer?.destroy();
     clearProgress();
+    dragController?.abort();
+    dragController = new AbortController();
+    const { signal } = dragController;
     miniBar?.remove();
 
     currentVideoId = video.videoId;
+
+    let speedIndex = 1;
 
     const built = buildMiniPlayer(video);
     miniBar = built.bar;
@@ -275,10 +321,60 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       video.videoId,
       () => {
         built.playPauseBtn.disabled = false;
+        built.seekBackBtn.disabled = false;
+        built.seekFwdBtn.disabled = false;
+        built.speedBtn.disabled = false;
         startProgress(built.bar);
       },
       () => showEnded(built.bar),
     );
+
+    const progressBar = built.bar.querySelector<HTMLElement>('.mini-progress')!;
+    const progressFill = built.bar.querySelector<HTMLElement>('.mini-progress-fill')!;
+
+    function getFraction(clientX: number): number {
+      const rect = progressBar.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    }
+    function seekToFraction(fraction: number): void {
+      const prog = ytPlayer?.getProgress();
+      if (!prog?.duration) return;
+      ytPlayer!.seekTo(fraction * prog.duration);
+      progressFill.style.width = `${fraction * 100}%`;
+    }
+
+    let dragging = false;
+    progressBar.addEventListener('mousedown', (e) => {
+      dragging = true;
+      progressFill.style.transition = 'none';
+      seekToFraction(getFraction(e.clientX));
+      e.preventDefault();
+    }, { signal });
+    document.addEventListener('mousemove', (e) => {
+      if (dragging) seekToFraction(getFraction(e.clientX));
+    }, { signal });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      progressFill.style.transition = '';
+    }, { signal });
+
+    built.seekBackBtn.addEventListener('click', () => {
+      const prog = ytPlayer?.getProgress();
+      if (prog) ytPlayer!.seekTo(prog.current - 10);
+    });
+
+    built.seekFwdBtn.addEventListener('click', () => {
+      const prog = ytPlayer?.getProgress();
+      if (prog) ytPlayer!.seekTo(prog.current + 10);
+    });
+
+    built.speedBtn.addEventListener('click', () => {
+      speedIndex = (speedIndex + 1) % SPEED_RATES.length;
+      const rate = SPEED_RATES[speedIndex];
+      ytPlayer?.setPlaybackRate(rate);
+      built.speedBtn.textContent = `${rate}×`;
+    });
 
     built.playPauseBtn.addEventListener('click', () => {
       if (ytPlayer!.isPaused()) {
@@ -296,6 +392,32 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       const next = videoList[(idx + 1) % videoList.length];
       if (next) mountVideo(next);
     });
+
+    built.saveBtn.addEventListener('click', async () => {
+      const token = getToken();
+      if (!token || !currentVideoId) return;
+      built.saveBtn.disabled = true;
+      built.saveBtn.innerHTML = '...';
+      try {
+        await addToWatchLater(token, currentVideoId);
+        built.saveBtn.innerHTML = '✓';
+      } catch {
+        built.saveBtn.innerHTML = '✗';
+      }
+      setTimeout(() => {
+        built.saveBtn.innerHTML = BOOKMARK_SVG;
+        built.saveBtn.disabled = false;
+      }, 2000);
+    });
+
+    function openOnYouTube(): void {
+      const t = Math.floor(ytPlayer?.getProgress()?.current ?? 0);
+      window.open(`https://www.youtube.com/watch?v=${currentVideoId}&t=${t}`, '_blank');
+    }
+
+    built.openBtn.addEventListener('click', openOnYouTube);
+    built.thumbEl.addEventListener('click', openOnYouTube);
+    built.titleEl.addEventListener('click', openOnYouTube);
   }
 
   game.start();
