@@ -2,7 +2,7 @@ import type { Subscription, YouTubeVideo } from './types.ts';
 import { YOUTUBE_API_BASE } from './constants.ts';
 import { getCached, setCached } from './cache.ts';
 
-function parseDuration(iso: string): number {
+export function parseDuration(iso: string): number {
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;
   const h = parseInt(match[1] ?? '0');
@@ -33,13 +33,24 @@ async function apiPost(token: string, path: string, params: Record<string, strin
   return res.json();
 }
 
-export async function addToWatchLater(token: string, videoId: string): Promise<void> {
-  await apiPost(token, 'playlistItems', { part: 'snippet' }, {
-    snippet: {
-      playlistId: 'WL',
-      resourceId: { kind: 'youtube#video', videoId },
-    },
+export async function rateVideo(token: string, videoId: string, rating: 'like' | 'none'): Promise<void> {
+  const url = new URL(`${YOUTUBE_API_BASE}/videos/rate`);
+  url.searchParams.set('id', videoId);
+  url.searchParams.set('rating', rating);
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
   });
+  if (!res.ok) throw new Error(`YouTube API error ${res.status}: ${await res.text()}`);
+}
+
+export async function likeVideo(token: string, videoId: string): Promise<void> {
+  return rateVideo(token, videoId, 'like');
+}
+
+export async function getVideoRating(token: string, videoId: string): Promise<'like' | 'dislike' | 'none'> {
+  const data = await apiFetch(token, 'videos', { part: 'myRating', id: videoId });
+  return data.items?.[0]?.myRating ?? 'none';
 }
 
 export async function fetchSubscriptions(token: string): Promise<Subscription[]> {

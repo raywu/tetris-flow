@@ -37,7 +37,7 @@ export const HARD_DROP_SCORE = 2;  // per cell
 
 export const LINES_PER_LEVEL = 10;
 
-export const DEBUG = new URLSearchParams(window.location.search).has('debug');
+export const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
 export const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
