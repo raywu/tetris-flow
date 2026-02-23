@@ -1,6 +1,12 @@
 import type { Subscription, YouTubeVideo } from './types.ts';
-import { searchVideos } from './youtube.ts';
-import { AUDIO_FRIENDLY_KEYWORDS, AUDIO_FRIENDLY_CATEGORY_IDS, MIN_AUDIO_DURATION_SECONDS } from './constants.ts';
+import { fetchPlaylistItems, fetchVideoDetails } from './youtube.ts';
+import {
+  AUDIO_FRIENDLY_KEYWORDS,
+  AUDIO_FRIENDLY_CATEGORY_IDS,
+  MIN_AUDIO_DURATION_SECONDS,
+  RECOMMENDATION_CHANNEL_SAMPLE,
+  PLAYLIST_ITEMS_PER_CHANNEL,
+} from './constants.ts';
 
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for',
@@ -30,6 +36,23 @@ export function extractTopics(subscriptions: Subscription[]): string[] {
     .map(([word]) => word);
 }
 
+function selectRelevantChannels(
+  subs: Subscription[],
+  topics: string[],
+  n: number
+): Subscription[] {
+  const topicSet = new Set(topics);
+  return subs
+    .map(sub => {
+      const tokens = sub.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+      const score = tokens.filter(t => topicSet.has(t)).length;
+      return { sub, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => x.sub);
+}
+
 export function isAudioFriendly(video: YouTubeVideo): boolean {
   const titleLower = video.title.toLowerCase();
   const hasKeyword = AUDIO_FRIENDLY_KEYWORDS.some(kw => titleLower.includes(kw));
@@ -51,24 +74,20 @@ function scoreVideo(video: YouTubeVideo): number {
 
 export async function buildRecommendations(token: string, subs: Subscription[]): Promise<YouTubeVideo[]> {
   const topics = extractTopics(subs);
-  const queries = topics.slice(0, 4).map(t => `${t} lecture interview podcast`);
+  const channels = selectRelevantChannels(subs, topics, RECOMMENDATION_CHANNEL_SAMPLE);
 
-  const results = await Promise.allSettled(queries.map(q => searchVideos(token, q)));
+  const playlistResults = await Promise.allSettled(
+    channels.map(ch => fetchPlaylistItems(token, ch.channelId.replace(/^UC/, 'UU'), PLAYLIST_ITEMS_PER_CHANNEL))
+  );
 
-  const seen = new Set<string>();
-  const videos: YouTubeVideo[] = [];
+  const videoIds = [
+    ...new Set(
+      playlistResults
+        .filter((r): r is PromiseFulfilledResult<string[]> => r.status === 'fulfilled')
+        .flatMap(r => r.value)
+    ),
+  ];
 
-  for (const result of results) {
-    if (result.status !== 'fulfilled') continue;
-    for (const video of result.value) {
-      if (!seen.has(video.videoId)) {
-        seen.add(video.videoId);
-        videos.push(video);
-      }
-    }
-  }
-
-  return videos
-    .filter(isAudioFriendly)
-    .sort((a, b) => scoreVideo(b) - scoreVideo(a));
+  const videos = await fetchVideoDetails(token, videoIds);
+  return videos.filter(isAudioFriendly).sort((a, b) => scoreVideo(b) - scoreVideo(a));
 }

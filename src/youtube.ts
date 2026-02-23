@@ -34,6 +34,21 @@ export async function fetchSubscriptions(token: string): Promise<Subscription[]>
   }));
 }
 
+export async function fetchPlaylistItems(
+  token: string,
+  playlistId: string,
+  maxResults = 15
+): Promise<string[]> {
+  const data = await apiFetch(token, 'playlistItems', {
+    part: 'snippet',
+    playlistId,
+    maxResults: String(maxResults),
+  });
+  return (data.items ?? [])
+    .map((item: any) => item.snippet?.resourceId?.videoId as string)
+    .filter(Boolean);
+}
+
 export async function searchVideos(token: string, query: string): Promise<YouTubeVideo[]> {
   const data = await apiFetch(token, 'search', {
     part: 'snippet',
@@ -63,22 +78,27 @@ export async function fetchVideoDetails(token: string, videoIds: string[]): Prom
 
   if (missing.length === 0) return cached;
 
-  const data = await apiFetch(token, 'videos', {
-    part: 'snippet,contentDetails',
-    id: missing.join(','),
-  });
+  const BATCH = 50;
+  const fetched: YouTubeVideo[] = [];
 
-  const fetched: YouTubeVideo[] = (data.items ?? []).map((item: any) => ({
-    videoId: item.id,
-    title: item.snippet.title,
-    channelTitle: item.snippet.channelTitle,
-    thumbnailUrl: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.default?.url ?? '',
-    durationSeconds: parseDuration(item.contentDetails?.duration ?? ''),
-    categoryId: item.snippet.categoryId ?? '',
-  }));
-
-  for (const video of fetched) {
-    setCached(`${PREFIX}${video.videoId}`, video, sessionStorage);
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const batch = missing.slice(i, i + BATCH);
+    const data = await apiFetch(token, 'videos', {
+      part: 'snippet,contentDetails',
+      id: batch.join(','),
+    });
+    for (const item of data.items ?? []) {
+      const video: YouTubeVideo = {
+        videoId: item.id,
+        title: item.snippet.title,
+        channelTitle: item.snippet.channelTitle,
+        thumbnailUrl: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.default?.url ?? '',
+        durationSeconds: parseDuration(item.contentDetails?.duration ?? ''),
+        categoryId: item.snippet.categoryId ?? '',
+      };
+      fetched.push(video);
+      setCached(`${PREFIX}${video.videoId}`, video, sessionStorage);
+    }
   }
 
   return [...cached, ...fetched];

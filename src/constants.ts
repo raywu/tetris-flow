@@ -49,3 +49,6 @@ export const AUDIO_FRIENDLY_KEYWORDS = [
 export const AUDIO_FRIENDLY_CATEGORY_IDS = ['27', '28', '25']; // Education, Science & Tech, News & Politics
 
 export const MIN_AUDIO_DURATION_SECONDS = 20 * 60; // 20 minutes
+
+export const RECOMMENDATION_CHANNEL_SAMPLE = 20;
+export const PLAYLIST_ITEMS_PER_CHANNEL = 15;
