@@ -3,15 +3,16 @@ import { Game } from './game.ts';
 import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
-import { addToWatchLater } from './youtube.ts';
-import { getToken } from './auth.ts';
+import { getVideoRating, rateVideo } from './youtube.ts';
+import { getToken, refreshToken } from './auth.ts';
 import type { YouTubeVideo } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
   import('./debug.ts').then(({ mountDebugOverlay }) => mountDebugOverlay());
 }
 
-const BOOKMARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>`;
+const THUMBSUP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>`;
+const THUMBSUP_OUTLINE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M9 21h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73V10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2zM9 9l4.34-4.34L12 10h9v2l-3 7H9V9zM1 9h2v12H1z"/></svg>`;
 const EXTERNAL_LINK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -124,7 +125,7 @@ function buildMiniPlayer(video: YouTubeVideo): {
       <button class="mini-btn" id="mini-speed" title="Playback speed" disabled>1×</button>
       <button class="mini-btn" id="mini-playpause" title="Play/Pause" disabled>⏸</button>
       <button class="mini-btn" id="mini-skip" title="Next video">⏭</button>
-      <button class="mini-btn" id="mini-save" title="Save to Watch Later">${BOOKMARK_SVG}</button>
+      <button class="mini-btn" id="mini-save" title="Like video">${THUMBSUP_OUTLINE_SVG}</button>
       <button class="mini-btn" id="mini-open" title="Open on YouTube">${EXTERNAL_LINK_SVG}</button>
     </div>
   `;
@@ -312,10 +313,24 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     currentVideoId = video.videoId;
 
     let speedIndex = 1;
+    let isLiked = false;
 
     const built = buildMiniPlayer(video);
     miniBar = built.bar;
     gameContainer.appendChild(miniBar);
+
+    function setLikedState(liked: boolean): void {
+      isLiked = liked;
+      built.saveBtn.innerHTML = liked ? THUMBSUP_SVG : THUMBSUP_OUTLINE_SVG;
+      built.saveBtn.classList.toggle('mini-btn--liked', liked);
+    }
+
+    const initToken = getToken();
+    if (initToken && currentVideoId) {
+      getVideoRating(initToken, currentVideoId)
+        .then(r => setLikedState(r === 'like'))
+        .catch(() => {});
+    }
 
     ytPlayer = new YouTubePlayer(
       video.videoId,
@@ -394,20 +409,32 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     });
 
     built.saveBtn.addEventListener('click', async () => {
-      const token = getToken();
+      let token = getToken();
       if (!token || !currentVideoId) return;
       built.saveBtn.disabled = true;
-      built.saveBtn.innerHTML = '...';
-      try {
-        await addToWatchLater(token, currentVideoId);
-        built.saveBtn.innerHTML = '✓';
-      } catch {
-        built.saveBtn.innerHTML = '✗';
+      const nextRating = isLiked ? 'none' : 'like';
+      if (nextRating === 'like') {
+        built.saveBtn.classList.remove('like-pop');
+        void built.saveBtn.offsetWidth;
+        built.saveBtn.classList.add('like-pop');
       }
-      setTimeout(() => {
-        built.saveBtn.innerHTML = BOOKMARK_SVG;
+      try {
+        try {
+          await rateVideo(token, currentVideoId, nextRating);
+        } catch (err: any) {
+          if (err.message?.includes('401')) {
+            token = await refreshToken();
+            await rateVideo(token, currentVideoId, nextRating);
+          } else {
+            throw err;
+          }
+        }
+        setLikedState(nextRating === 'like');
+      } catch (err) {
+        console.error('[save]', err);
+      } finally {
         built.saveBtn.disabled = false;
-      }, 2000);
+      }
     });
 
     function openOnYouTube(): void {

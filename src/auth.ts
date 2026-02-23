@@ -41,13 +41,9 @@ export function switchClientId(): void {
   if ((import.meta as any).env.DEV) console.log('[auth] switchClientId %s → %s, token + caches cleared', current, next);
 }
 
-export async function signIn(): Promise<string> {
-  await loadGISScript();
-
+function requestToken(prompt: string): Promise<string> {
   const clientId = getActiveClientId();
-  if ((import.meta as any).env.DEV) console.log('[auth] signIn using clientId=%s', clientId?.slice(0, 20));
-  if (!clientId) throw new Error('VITE_GOOGLE_CLIENT_ID is not set');
-
+  if (!clientId) return Promise.reject(new Error('VITE_GOOGLE_CLIENT_ID is not set'));
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
@@ -62,8 +58,20 @@ export async function signIn(): Promise<string> {
         resolve(token);
       },
     });
-    client.requestAccessToken({ prompt: 'consent' });
+    client.requestAccessToken({ prompt });
   });
+}
+
+export async function signIn(): Promise<string> {
+  await loadGISScript();
+  const clientId = getActiveClientId();
+  if ((import.meta as any).env.DEV) console.log('[auth] signIn using clientId=%s', clientId?.slice(0, 20));
+  return requestToken('consent');
+}
+
+export async function refreshToken(): Promise<string> {
+  await loadGISScript();
+  return requestToken('');
 }
 
 export function signOut(): void {
