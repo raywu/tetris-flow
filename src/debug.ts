@@ -1,4 +1,4 @@
-import { getActiveClientId, switchClientId, signIn } from './auth.ts';
+import { getActiveSlot, switchClientId } from './auth.ts';
 
 export function mountDebugOverlay(): void {
   const bar = document.createElement('div');
@@ -34,14 +34,12 @@ export function mountDebugOverlay(): void {
   ].join(';');
 
   function refresh(): void {
-    const id = getActiveClientId();
-    label.textContent = `Client: …${id.slice(-20)}`;
+    label.textContent = `Client: ${getActiveSlot()}`;
   }
 
   btn.addEventListener('click', () => {
     switchClientId();
-    refresh();
-    signIn().catch(() => {});
+    location.reload();
   });
 
   bar.appendChild(label);

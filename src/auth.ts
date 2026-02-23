@@ -17,26 +17,35 @@ function loadGISScript(): Promise<void> {
   });
 }
 
+export function getActiveSlot(): '1' | '2' {
+  return (sessionStorage.getItem(ACTIVE_CLIENT_KEY) ?? '1') as '1' | '2';
+}
+
 export function getActiveClientId(): string {
   const slot = sessionStorage.getItem(ACTIVE_CLIENT_KEY) ?? '1';
-  if (slot === '2') {
-    const id2 = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID_2 as string;
-    if (id2) return id2;
-  }
-  return (import.meta as any).env.VITE_GOOGLE_CLIENT_ID as string;
+  const id1 = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID as string;
+  const id2 = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID_2 as string;
+  if ((import.meta as any).env.DEV) console.log('[auth] getActiveClientId slot=%s id1=%s id2=%s', slot, id1?.slice(0, 8), id2?.slice(0, 8));
+  if (slot === '2' && id2) return id2;
+  return id1;
 }
 
 export function switchClientId(): void {
   const current = sessionStorage.getItem(ACTIVE_CLIENT_KEY) ?? '1';
-  sessionStorage.setItem(ACTIVE_CLIENT_KEY, current === '1' ? '2' : '1');
+  const next = current === '1' ? '2' : '1';
+  sessionStorage.setItem(ACTIVE_CLIENT_KEY, next);
   token = null;
   sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('yt_recommendations');
+  localStorage.removeItem('yt_subscriptions');
+  if ((import.meta as any).env.DEV) console.log('[auth] switchClientId %s → %s, token + caches cleared', current, next);
 }
 
 export async function signIn(): Promise<string> {
   await loadGISScript();
 
   const clientId = getActiveClientId();
+  if ((import.meta as any).env.DEV) console.log('[auth] signIn using clientId=%s', clientId?.slice(0, 20));
   if (!clientId) throw new Error('VITE_GOOGLE_CLIENT_ID is not set');
 
   return new Promise((resolve, reject) => {
