@@ -27,6 +27,7 @@ export class PreGameScreen {
   private videos: YouTubeVideo[] = [];
   private token: string | null = null;
   private errorMessage = '';
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     container: HTMLElement,
@@ -69,6 +70,10 @@ export class PreGameScreen {
   }
 
   unmount(): void {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
     this.el?.remove();
     this.el = null;
   }
@@ -164,10 +169,9 @@ export class PreGameScreen {
 
     const searchInput = this.el?.querySelector<HTMLInputElement>('#pg-search');
     if (searchInput) {
-      let debounce: ReturnType<typeof setTimeout>;
       searchInput.addEventListener('input', () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(() => this.handleSearch(searchInput.value.trim()), 500);
+        if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.handleSearch(searchInput.value.trim()), 500);
       });
     }
   }

@@ -438,6 +438,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   }
 
   game.start();
+  window.addEventListener('pagehide', () => game.stop(), { once: true });
   if (initialVideo) mountVideo(initialVideo);
   if (DEBUG) (window as any).__tetris = game;
 }
