@@ -1,5 +1,5 @@
 import type { Subscription, YouTubeVideo } from './types.ts';
-import { YOUTUBE_API_BASE } from './constants.ts';
+import { YOUTUBE_API_BASE, MAX_SUBSCRIPTION_PAGES } from './constants.ts';
 import { getCached, setCached } from './cache.ts';
 
 export function parseDuration(iso: string): number {
@@ -43,16 +43,23 @@ export async function getVideoRating(token: string, videoId: string): Promise<'l
 }
 
 export async function fetchSubscriptions(token: string): Promise<Subscription[]> {
-  const data = await apiFetch(token, 'subscriptions', {
-    part: 'snippet',
-    mine: 'true',
-    maxResults: '50',
-  });
-  return (data.items ?? []).map((item: any) => ({
-    channelId: item.snippet.resourceId.channelId,
-    title: item.snippet.title,
-    description: item.snippet.description,
-  }));
+  const results: Subscription[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MAX_SUBSCRIPTION_PAGES; page++) {
+    const params: Record<string, string> = { part: 'snippet', mine: 'true', maxResults: '50' };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await apiFetch(token, 'subscriptions', params);
+    for (const item of data.items ?? []) {
+      results.push({
+        channelId: item.snippet.resourceId.channelId,
+        title: item.snippet.title,
+        description: item.snippet.description,
+      });
+    }
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
+  return results;
 }
 
 export async function fetchPlaylistItems(
