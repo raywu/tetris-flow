@@ -27,11 +27,13 @@ export class YouTubePlayer {
   private videoId: string;
   private onReady: () => void;
   private onEnded: () => void;
+  private onPause?: () => void;
 
-  constructor(videoId: string, onReady: () => void, onEnded: () => void) {
+  constructor(videoId: string, onReady: () => void, onEnded: () => void, onPause?: () => void) {
     this.videoId = videoId;
     this.onReady = onReady;
     this.onEnded = onEnded;
+    this.onPause = onPause;
     this.containerId = `yt-player-${Date.now()}`;
     this.init();
   }
@@ -53,6 +55,7 @@ export class YouTubePlayer {
         onReady: () => this.onReady(),
         onStateChange: (e: YT.OnStateChangeEvent) => {
           if (e.data === YT.PlayerState.ENDED) this.onEnded();
+          if (e.data === YT.PlayerState.PAUSED) this.onPause?.();
         },
       },
     });

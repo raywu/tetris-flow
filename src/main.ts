@@ -343,6 +343,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
         startProgress(built.bar);
       },
       () => showEnded(built.bar),
+      () => { if (!audioPausedByGame) openVideoSelector(); },
     );
 
     const progressBar = built.bar.querySelector<HTMLElement>('.mini-progress')!;
