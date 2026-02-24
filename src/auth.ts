@@ -42,6 +42,12 @@ export function switchClientId(): void {
   sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('yt_recommendations');
   localStorage.removeItem('yt_subscriptions');
+  const searchKeys: string[] = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key?.startsWith('yt_search_')) searchKeys.push(key);
+  }
+  for (const key of searchKeys) sessionStorage.removeItem(key);
   if ((import.meta as any).env.DEV) console.log('[auth] switchClientId %s → %s, token + caches cleared', current, next);
 }
 
