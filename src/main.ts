@@ -301,6 +301,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   }
 
   const SPEED_RATES = [0.75, 1, 1.25, 1.5, 2];
+  let speedIndex = 1;
 
   function mountVideo(video: YouTubeVideo): void {
     ytPlayer?.destroy();
@@ -312,10 +313,10 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     currentVideoId = video.videoId;
 
-    let speedIndex = 1;
     let isLiked = false;
 
     const built = buildMiniPlayer(video);
+    built.speedBtn.textContent = `${SPEED_RATES[speedIndex]}×`;
     miniBar = built.bar;
     gameContainer.appendChild(miniBar);
 
@@ -334,6 +335,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     ytPlayer = new YouTubePlayer(
       video.videoId,
       () => {
+        ytPlayer?.setPlaybackRate(SPEED_RATES[speedIndex]);
         built.playPauseBtn.disabled = false;
         built.seekBackBtn.disabled = false;
         built.seekFwdBtn.disabled = false;
