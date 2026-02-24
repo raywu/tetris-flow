@@ -10,6 +10,20 @@ const TTL_SUBS = 7 * 24 * 60 * 60 * 1000;
 
 type State = 'idle' | 'signing-in' | 'loading' | 'ready' | 'error';
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function friendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('401')) return 'Session expired — please sign in again.';
+  if (msg.includes('403') && msg.includes('quotaExceeded')) return 'Daily API quota reached. Try again tomorrow.';
+  if (msg.includes('403')) return 'Access denied. Check your Google account permissions.';
+  if (msg.includes('timed out') || msg.includes('Failed to load')) return 'Could not reach Google — check your connection and reload.';
+  if (msg.includes('popup_closed') || msg.includes('access_denied')) return 'Sign-in was cancelled. Try again.';
+  return 'Something went wrong. Try again or reload the page.';
+}
+
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -131,7 +145,7 @@ export class PreGameScreen {
       case 'error':
         return `
           <div class="pregame-error">
-            <span class="pregame-error-msg">${this.errorMessage}</span>
+            <span class="pregame-error-msg">${escapeHtml(this.errorMessage)}</span>
             <button class="btn btn-ghost" id="pg-retry">Try again</button>
           </div>
           ${this.skipLabel ? `<div class="pregame-actions"><button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button></div>` : ''}
@@ -184,7 +198,7 @@ export class PreGameScreen {
       this.setState('loading');
       await this.loadRecommendations();
     } catch (err) {
-      this.errorMessage = err instanceof Error ? err.message : 'Sign-in failed';
+      this.errorMessage = friendlyError(err);
       this.setState('error');
     }
   }
@@ -212,7 +226,7 @@ export class PreGameScreen {
       setCached('yt_recommendations', this.videos);
       this.setState('ready');
     } catch (err) {
-      this.errorMessage = err instanceof Error ? err.message : 'Failed to load recommendations';
+      this.errorMessage = friendlyError(err);
       this.setState('error');
     }
   }
