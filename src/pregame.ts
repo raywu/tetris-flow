@@ -1,6 +1,6 @@
 import type { YouTubeVideo } from './types.ts';
 import type { Subscription } from './types.ts';
-import { signIn, getToken } from './auth.ts';
+import { signIn, getToken, withTokenRefresh } from './auth.ts';
 import { fetchSubscriptions, searchVideos } from './youtube.ts';
 import { buildRecommendations } from './recommendations.ts';
 import { getCached, setCached } from './cache.ts';
@@ -197,11 +197,11 @@ export class PreGameScreen {
 
       let subs = getCached<Subscription[]>('yt_subscriptions', TTL_SUBS);
       if (!subs) {
-        subs = await fetchSubscriptions(this.token!);
+        subs = await withTokenRefresh(token => fetchSubscriptions(token));
         setCached('yt_subscriptions', subs);
       }
 
-      this.videos = await buildRecommendations(this.token!, subs);
+      this.videos = await withTokenRefresh(token => buildRecommendations(token, subs!));
       setCached('yt_recommendations', this.videos);
       this.setState('ready');
     } catch (err) {
@@ -211,7 +211,7 @@ export class PreGameScreen {
   }
 
   private async handleSearch(query: string): Promise<void> {
-    if (!query || !this.token) return;
+    if (!query || !getToken()) return;
     const cacheKey = `yt_search_${query}`;
     const cached = getCached<YouTubeVideo[]>(cacheKey, Infinity, sessionStorage);
     if (cached) {
@@ -219,7 +219,7 @@ export class PreGameScreen {
       this.render();
       return;
     }
-    const results = await searchVideos(this.token, query);
+    const results = await withTokenRefresh(token => searchVideos(token, query));
     setCached(cacheKey, results, sessionStorage);
     this.videos = results;
     this.render();

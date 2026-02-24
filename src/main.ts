@@ -4,7 +4,7 @@ import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
 import { getVideoRating, rateVideo } from './youtube.ts';
-import { getToken, refreshToken } from './auth.ts';
+import { getToken, withTokenRefresh } from './auth.ts';
 import type { YouTubeVideo } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
@@ -325,9 +325,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       built.saveBtn.classList.toggle('mini-btn--liked', liked);
     }
 
-    const initToken = getToken();
-    if (initToken && currentVideoId) {
-      getVideoRating(initToken, currentVideoId)
+    if (getToken() && currentVideoId) {
+      withTokenRefresh(token => getVideoRating(token, currentVideoId!))
         .then(r => setLikedState(r === 'like'))
         .catch(() => {});
     }
@@ -409,8 +408,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     });
 
     built.saveBtn.addEventListener('click', async () => {
-      let token = getToken();
-      if (!token || !currentVideoId) return;
+      const videoId = currentVideoId;
+      if (!getToken() || !videoId) return;
       built.saveBtn.disabled = true;
       const nextRating = isLiked ? 'none' : 'like';
       if (nextRating === 'like') {
@@ -419,16 +418,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
         built.saveBtn.classList.add('like-pop');
       }
       try {
-        try {
-          await rateVideo(token, currentVideoId, nextRating);
-        } catch (err: any) {
-          if (err.message?.includes('401')) {
-            token = await refreshToken();
-            await rateVideo(token, currentVideoId, nextRating);
-          } else {
-            throw err;
-          }
-        }
+        await withTokenRefresh(token => rateVideo(token, videoId, nextRating));
         setLikedState(nextRating === 'like');
       } catch (err) {
         console.error('[save]', err);

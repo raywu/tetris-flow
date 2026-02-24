@@ -85,3 +85,17 @@ export function signOut(): void {
 export function getToken(): string | null {
   return token ?? sessionStorage.getItem(SESSION_KEY);
 }
+
+export async function withTokenRefresh<T>(fn: (token: string) => Promise<T>): Promise<T> {
+  const t = getToken();
+  if (!t) throw new Error('Not signed in');
+  try {
+    return await fn(t);
+  } catch (err: any) {
+    if (err.message?.includes('401')) {
+      const fresh = await refreshToken();
+      return fn(fresh);
+    }
+    throw err;
+  }
+}
