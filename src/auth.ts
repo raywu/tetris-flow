@@ -6,15 +6,19 @@ function loadGISScript(): Promise<void> {
   if (document.querySelector('script[src*="accounts.google.com/gsi/client"]')) {
     return Promise.resolve();
   }
-  return new Promise((resolve, reject) => {
+  const load = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load GIS script'));
+    script.onerror = () => reject(new Error('Failed to load Google sign-in script'));
     document.head.appendChild(script);
   });
+  const timeout = new Promise<void>((_, reject) =>
+    setTimeout(() => reject(new Error('Google sign-in script timed out')), 10_000)
+  );
+  return Promise.race([load, timeout]);
 }
 
 export function getActiveSlot(): '1' | '2' {
