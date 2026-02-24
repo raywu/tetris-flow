@@ -3,11 +3,9 @@ let apiReadyCallbacks: Array<() => void> = [];
 
 function loadYTApi(): Promise<void> {
   if (apiReady) return Promise.resolve();
-  if (document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-    return new Promise(resolve => apiReadyCallbacks.push(resolve));
-  }
-  return new Promise(resolve => {
+  const pending = new Promise<void>(resolve => {
     apiReadyCallbacks.push(resolve);
+    if (document.querySelector('script[src*="youtube.com/iframe_api"]')) return;
     (window as any).onYouTubeIframeAPIReady = () => {
       apiReady = true;
       for (const cb of apiReadyCallbacks) cb();
@@ -17,6 +15,10 @@ function loadYTApi(): Promise<void> {
     script.src = 'https://www.youtube.com/iframe_api';
     document.head.appendChild(script);
   });
+  const timeout = new Promise<void>((_, reject) =>
+    setTimeout(() => reject(new Error('YouTube player API timed out')), 10_000)
+  );
+  return Promise.race([pending, timeout]);
 }
 
 export class YouTubePlayer {

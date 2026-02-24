@@ -4,7 +4,7 @@ import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
 import { getVideoRating, rateVideo } from './youtube.ts';
-import { getToken, refreshToken } from './auth.ts';
+import { getToken, withTokenRefresh } from './auth.ts';
 import type { YouTubeVideo } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
@@ -301,6 +301,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   }
 
   const SPEED_RATES = [0.75, 1, 1.25, 1.5, 2];
+  let speedIndex = 1;
 
   function mountVideo(video: YouTubeVideo): void {
     ytPlayer?.destroy();
@@ -312,10 +313,10 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     currentVideoId = video.videoId;
 
-    let speedIndex = 1;
     let isLiked = false;
 
     const built = buildMiniPlayer(video);
+    built.speedBtn.textContent = `${SPEED_RATES[speedIndex]}×`;
     miniBar = built.bar;
     gameContainer.appendChild(miniBar);
 
@@ -325,9 +326,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       built.saveBtn.classList.toggle('mini-btn--liked', liked);
     }
 
-    const initToken = getToken();
-    if (initToken && currentVideoId) {
-      getVideoRating(initToken, currentVideoId)
+    if (getToken() && currentVideoId) {
+      withTokenRefresh(token => getVideoRating(token, currentVideoId!))
         .then(r => setLikedState(r === 'like'))
         .catch(() => {});
     }
@@ -335,6 +335,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     ytPlayer = new YouTubePlayer(
       video.videoId,
       () => {
+        ytPlayer?.setPlaybackRate(SPEED_RATES[speedIndex]);
         built.playPauseBtn.disabled = false;
         built.seekBackBtn.disabled = false;
         built.seekFwdBtn.disabled = false;
@@ -409,8 +410,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     });
 
     built.saveBtn.addEventListener('click', async () => {
-      let token = getToken();
-      if (!token || !currentVideoId) return;
+      const videoId = currentVideoId;
+      if (!getToken() || !videoId) return;
       built.saveBtn.disabled = true;
       const nextRating = isLiked ? 'none' : 'like';
       if (nextRating === 'like') {
@@ -419,16 +420,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
         built.saveBtn.classList.add('like-pop');
       }
       try {
-        try {
-          await rateVideo(token, currentVideoId, nextRating);
-        } catch (err: any) {
-          if (err.message?.includes('401')) {
-            token = await refreshToken();
-            await rateVideo(token, currentVideoId, nextRating);
-          } else {
-            throw err;
-          }
-        }
+        await withTokenRefresh(token => rateVideo(token, videoId, nextRating));
         setLikedState(nextRating === 'like');
       } catch (err) {
         console.error('[save]', err);
@@ -448,6 +440,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   }
 
   game.start();
+  window.addEventListener('pagehide', () => game.stop(), { once: true });
   if (initialVideo) mountVideo(initialVideo);
   if (DEBUG) (window as any).__tetris = game;
 }

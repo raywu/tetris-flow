@@ -1,5 +1,5 @@
 import type { Subscription, YouTubeVideo } from './types.ts';
-import { YOUTUBE_API_BASE } from './constants.ts';
+import { YOUTUBE_API_BASE, MAX_SUBSCRIPTION_PAGES } from './constants.ts';
 import { getCached, setCached } from './cache.ts';
 
 export function parseDuration(iso: string): number {
@@ -21,17 +21,6 @@ async function apiFetch(token: string, path: string, params: Record<string, stri
   return res.json();
 }
 
-async function apiPost(token: string, path: string, params: Record<string, string>, body: object): Promise<any> {
-  const url = new URL(`${YOUTUBE_API_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`YouTube API error ${res.status}: ${await res.text()}`);
-  return res.json();
-}
 
 export async function rateVideo(token: string, videoId: string, rating: 'like' | 'none'): Promise<void> {
   const url = new URL(`${YOUTUBE_API_BASE}/videos/rate`);
@@ -54,16 +43,23 @@ export async function getVideoRating(token: string, videoId: string): Promise<'l
 }
 
 export async function fetchSubscriptions(token: string): Promise<Subscription[]> {
-  const data = await apiFetch(token, 'subscriptions', {
-    part: 'snippet',
-    mine: 'true',
-    maxResults: '50',
-  });
-  return (data.items ?? []).map((item: any) => ({
-    channelId: item.snippet.resourceId.channelId,
-    title: item.snippet.title,
-    description: item.snippet.description,
-  }));
+  const results: Subscription[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MAX_SUBSCRIPTION_PAGES; page++) {
+    const params: Record<string, string> = { part: 'snippet', mine: 'true', maxResults: '50' };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await apiFetch(token, 'subscriptions', params);
+    for (const item of data.items ?? []) {
+      results.push({
+        channelId: item.snippet.resourceId.channelId,
+        title: item.snippet.title,
+        description: item.snippet.description,
+      });
+    }
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
+  return results;
 }
 
 export async function fetchPlaylistItems(

@@ -52,3 +52,4 @@ export const MIN_AUDIO_DURATION_SECONDS = 20 * 60; // 20 minutes
 
 export const RECOMMENDATION_CHANNEL_SAMPLE = 20;
 export const PLAYLIST_ITEMS_PER_CHANNEL = 15;
+export const MAX_SUBSCRIPTION_PAGES = 4; // 4 × 50 = 200 subs max; ~4 quota units

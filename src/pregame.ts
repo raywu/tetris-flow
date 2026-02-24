@@ -1,6 +1,6 @@
 import type { YouTubeVideo } from './types.ts';
 import type { Subscription } from './types.ts';
-import { signIn, getToken } from './auth.ts';
+import { signIn, getToken, withTokenRefresh } from './auth.ts';
 import { fetchSubscriptions, searchVideos } from './youtube.ts';
 import { buildRecommendations } from './recommendations.ts';
 import { getCached, setCached } from './cache.ts';
@@ -9,6 +9,20 @@ const TTL_RECS = 24 * 60 * 60 * 1000;
 const TTL_SUBS = 7 * 24 * 60 * 60 * 1000;
 
 type State = 'idle' | 'signing-in' | 'loading' | 'ready' | 'error';
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function friendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('401')) return 'Session expired — please sign in again.';
+  if (msg.includes('403') && msg.includes('quotaExceeded')) return 'Daily API quota reached. Try again tomorrow.';
+  if (msg.includes('403')) return 'Access denied. Check your Google account permissions.';
+  if (msg.includes('timed out') || msg.includes('Failed to load')) return 'Could not reach Google — check your connection and reload.';
+  if (msg.includes('popup_closed') || msg.includes('access_denied')) return 'Sign-in was cancelled. Try again.';
+  return 'Something went wrong. Try again or reload the page.';
+}
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -25,8 +39,10 @@ export class PreGameScreen {
   private el: HTMLElement | null = null;
   private state: State = 'idle';
   private videos: YouTubeVideo[] = [];
+  private recommendedVideos: YouTubeVideo[] = [];
   private token: string | null = null;
   private errorMessage = '';
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     container: HTMLElement,
@@ -69,6 +85,10 @@ export class PreGameScreen {
   }
 
   unmount(): void {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
     this.el?.remove();
     this.el = null;
   }
@@ -125,7 +145,7 @@ export class PreGameScreen {
       case 'error':
         return `
           <div class="pregame-error">
-            <span class="pregame-error-msg">${this.errorMessage}</span>
+            <span class="pregame-error-msg">${escapeHtml(this.errorMessage)}</span>
             <button class="btn btn-ghost" id="pg-retry">Try again</button>
           </div>
           ${this.skipLabel ? `<div class="pregame-actions"><button class="btn btn-ghost" id="pg-skip">${this.skipLabel}</button></div>` : ''}
@@ -164,10 +184,9 @@ export class PreGameScreen {
 
     const searchInput = this.el?.querySelector<HTMLInputElement>('#pg-search');
     if (searchInput) {
-      let debounce: ReturnType<typeof setTimeout>;
       searchInput.addEventListener('input', () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(() => this.handleSearch(searchInput.value.trim()), 500);
+        if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.handleSearch(searchInput.value.trim()), 500);
       });
     }
   }
@@ -179,7 +198,7 @@ export class PreGameScreen {
       this.setState('loading');
       await this.loadRecommendations();
     } catch (err) {
-      this.errorMessage = err instanceof Error ? err.message : 'Sign-in failed';
+      this.errorMessage = friendlyError(err);
       this.setState('error');
     }
   }
@@ -191,27 +210,36 @@ export class PreGameScreen {
       const recsCached = getCached<YouTubeVideo[]>('yt_recommendations', TTL_RECS);
       if (recsCached) {
         this.videos = recsCached;
+        this.recommendedVideos = recsCached;
         this.setState('ready');
         return;
       }
 
       let subs = getCached<Subscription[]>('yt_subscriptions', TTL_SUBS);
       if (!subs) {
-        subs = await fetchSubscriptions(this.token!);
+        subs = await withTokenRefresh(token => fetchSubscriptions(token));
         setCached('yt_subscriptions', subs);
       }
 
-      this.videos = await buildRecommendations(this.token!, subs);
+      this.videos = await withTokenRefresh(token => buildRecommendations(token, subs!));
+      this.recommendedVideos = this.videos;
       setCached('yt_recommendations', this.videos);
       this.setState('ready');
     } catch (err) {
-      this.errorMessage = err instanceof Error ? err.message : 'Failed to load recommendations';
+      this.errorMessage = friendlyError(err);
       this.setState('error');
     }
   }
 
   private async handleSearch(query: string): Promise<void> {
-    if (!query || !this.token) return;
+    if (!getToken()) return;
+    if (!query) {
+      if (this.recommendedVideos.length) {
+        this.videos = this.recommendedVideos;
+        this.render();
+      }
+      return;
+    }
     const cacheKey = `yt_search_${query}`;
     const cached = getCached<YouTubeVideo[]>(cacheKey, Infinity, sessionStorage);
     if (cached) {
@@ -219,7 +247,7 @@ export class PreGameScreen {
       this.render();
       return;
     }
-    const results = await searchVideos(this.token, query);
+    const results = await withTokenRefresh(token => searchVideos(token, query));
     setCached(cacheKey, results, sessionStorage);
     this.videos = results;
     this.render();
