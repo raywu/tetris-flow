@@ -46,24 +46,68 @@
 
 ## Setup steps
 
-### 1. Connect the repo to Vercel
+### 1. Google Cloud: enable the YouTube Data API
+
+In [Google Cloud Console](https://console.cloud.google.com) → **APIs & Services → Library**, search for **YouTube Data API v3** and enable it. The app will silently fail at the subscriptions/search calls if this is skipped — there's no obvious error message.
+
+### 2. Google Cloud: configure the OAuth consent screen
+
+Go to **APIs & Services → OAuth consent screen**.
+
+- **User type:** External
+- **Publishing status:** Leave as **Testing** — you do not need to publish. In Testing mode only listed test users can sign in, which is fine for personal use and avoids the Google verification process entirely (which is required for apps using sensitive scopes like `youtube.force-ssl` if they go public).
+- Under **Test users**, add your own Google account.
+- **Scopes:** The app requests `https://www.googleapis.com/auth/youtube.force-ssl`. Add this scope on the consent screen. Google will show a warning during sign-in ("this app is not verified") which is expected and safe to proceed through for personal use.
+
+### 3. Google Cloud: update OAuth Client ID authorized origins
+
+Go to **APIs & Services → Credentials** → your OAuth 2.0 Client ID (Web application type).
+
+Under **Authorized JavaScript origins**, add:
+
+```
+https://tetris.raywu.org
+http://localhost:5173
+```
+
+**Do not add anything under Authorized redirect URIs.** The app uses the GIS Token Client flow (implicit grant), which only checks the JavaScript origin — redirect URIs are not involved and adding them won't help if the origin is wrong.
+
+If you're using a second OAuth client ID for quota switching (`VITE_GOOGLE_CLIENT_ID_2`), apply the same origin additions to that client as well.
+
+> The origin check is exact: `https://tetris.raywu.org` (no trailing slash, must be `https`). A mismatch causes a `redirect_uri_mismatch` or `invalid_client` error in the GIS popup with no further detail.
+
+### 4. Connect the repo to Vercel
 
 1. Go to [vercel.com](https://vercel.com) → **Add New Project** → import from GitHub.
 2. Vercel auto-detects Vite. Confirm:
    - **Build command:** `npm run build`
    - **Output directory:** `dist`
    - **Install command:** `npm install`
-3. Deploy. Note the assigned `*.vercel.app` URL — you'll need it for DNS.
+3. Deploy once to get an initial `*.vercel.app` URL (needed for the next step).
 
-### 2. Add the custom domain in Vercel
+### 5. Set environment variables in Vercel
 
-In the project **Settings → Domains**, add `tetris.raywu.org`.
+Go to project **Settings → Environment Variables** and add:
 
-Vercel will show you the DNS record to create (typically a CNAME).
+| Variable | Value |
+|---|---|
+| `VITE_GOOGLE_CLIENT_ID` | your primary OAuth client ID (ends in `.apps.googleusercontent.com`) |
+| `VITE_GOOGLE_CLIENT_ID_2` | second client ID for quota switching, or leave blank |
 
-### 3. Add the CNAME at your registrar
+**Critical:** `VITE_` prefixed variables are baked into the JavaScript bundle at build time by Vite — they are not runtime environment variables. This means:
+- They will not be present if you just restart the deployment; you must trigger a new build.
+- If you rotate a client ID, push any commit (even a whitespace change) to trigger a rebuild.
+- Do not name them without the `VITE_` prefix expecting them to be available in the browser — they won't be.
 
-In whatever DNS provider manages `raywu.org` (not Svbtle — this is at your domain registrar or a DNS host like Cloudflare):
+After saving the variables, redeploy from the Vercel dashboard (or push a commit) so the build picks them up.
+
+### 6. Add the custom domain in Vercel
+
+In project **Settings → Domains**, add `tetris.raywu.org`. Vercel will display the DNS record to create.
+
+### 7. Add the CNAME at your registrar
+
+In whatever DNS provider manages `raywu.org` (your domain registrar — not Svbtle, which only controls the web server):
 
 ```
 Type:  CNAME
@@ -72,24 +116,11 @@ Value: cname.vercel-dns.com
 TTL:   auto (or 3600)
 ```
 
-> If you use Cloudflare, set the record to **DNS-only** (grey cloud) to avoid conflicts with Vercel's TLS certificate provisioning.
+> If you use Cloudflare, set the record to **DNS-only** (grey cloud, proxying off). Cloudflare proxying interferes with Vercel's TLS certificate provisioning via Let's Encrypt.
 
-Vercel will auto-provision a TLS cert via Let's Encrypt once the CNAME propagates (usually a few minutes).
+Vercel auto-provisions a TLS cert once the CNAME propagates (usually a few minutes, up to an hour).
 
-### 4. Update Google OAuth authorized origins
-
-In [Google Cloud Console](https://console.cloud.google.com) → **APIs & Services → Credentials** → your OAuth 2.0 Client ID:
-
-Under **Authorized JavaScript origins**, add:
-```
-https://tetris.raywu.org
-```
-
-This is required because `auth.ts` initiates GIS OAuth from the browser. The origin must match exactly — no trailing slash.
-
-If you want to keep local dev working, also ensure `http://localhost:5173` is listed.
-
-### 5. No Vite config changes needed
+### 8. No Vite config changes needed
 
 Because the app lives at the root of `tetris.raywu.org`, the default Vite `base: '/'` is correct. No changes to `vite.config.ts` are required.
 
@@ -111,5 +142,11 @@ To deploy a preview of a feature branch: push the branch to GitHub; Vercel creat
 | URL | `tetris.raywu.org` |
 | Subfolder at raywu.org | Not viable (Svbtle restriction) |
 | DNS record | `CNAME tetris → cname.vercel-dns.com` |
+| Cloudflare proxy | Off (DNS-only / grey cloud) |
 | Vite base path | `/` (no change) |
-| OAuth origin to add | `https://tetris.raywu.org` |
+| OAuth consent screen | External, Testing mode — no Google verification needed |
+| OAuth authorized origin | `https://tetris.raywu.org` (+ `http://localhost:5173`) |
+| OAuth redirect URIs | None — GIS token client flow doesn't use them |
+| Env vars in Vercel | `VITE_GOOGLE_CLIENT_ID`, optionally `VITE_GOOGLE_CLIENT_ID_2` |
+| Env var gotcha | Baked at build time — must redeploy after changes |
+| YouTube Data API | Must be enabled in Google Cloud project |
