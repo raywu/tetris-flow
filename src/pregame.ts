@@ -25,6 +25,7 @@ export class PreGameScreen {
   private el: HTMLElement | null = null;
   private state: State = 'idle';
   private videos: YouTubeVideo[] = [];
+  private recommendedVideos: YouTubeVideo[] = [];
   private token: string | null = null;
   private errorMessage = '';
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -195,6 +196,7 @@ export class PreGameScreen {
       const recsCached = getCached<YouTubeVideo[]>('yt_recommendations', TTL_RECS);
       if (recsCached) {
         this.videos = recsCached;
+        this.recommendedVideos = recsCached;
         this.setState('ready');
         return;
       }
@@ -206,6 +208,7 @@ export class PreGameScreen {
       }
 
       this.videos = await withTokenRefresh(token => buildRecommendations(token, subs!));
+      this.recommendedVideos = this.videos;
       setCached('yt_recommendations', this.videos);
       this.setState('ready');
     } catch (err) {
@@ -215,7 +218,14 @@ export class PreGameScreen {
   }
 
   private async handleSearch(query: string): Promise<void> {
-    if (!query || !getToken()) return;
+    if (!getToken()) return;
+    if (!query) {
+      if (this.recommendedVideos.length) {
+        this.videos = this.recommendedVideos;
+        this.render();
+      }
+      return;
+    }
     const cacheKey = `yt_search_${query}`;
     const cached = getCached<YouTubeVideo[]>(cacheKey, Infinity, sessionStorage);
     if (cached) {
