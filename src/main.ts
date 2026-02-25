@@ -4,8 +4,10 @@ import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
 import { getVideoRating, rateVideo } from './youtube.ts';
-import { getToken, withTokenRefresh } from './auth.ts';
-import type { YouTubeVideo } from './types.ts';
+import { getToken, withTokenRefresh, getUserInfo } from './auth.ts';
+import { addScore, getTopScores } from './firebase.ts';
+import { showLeaderboard } from './leaderboard.ts';
+import type { YouTubeVideo, LeaderboardEntry } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
   import('./debug.ts').then(({ mountDebugOverlay }) => mountDebugOverlay());
@@ -162,8 +164,10 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let dragController: AbortController | null = null;
   let videoList: YouTubeVideo[] = initialList;
   let currentVideoId: string | null = null;
+  let currentVideoTitle = '';
   let audioPausedByGame = false;
   let modalCleanup: (() => void) | null = null;
+  let leaderboardCleanup: (() => void) | null = null;
 
   function clearProgress(): void {
     if (progressInterval !== null) {
@@ -268,6 +272,59 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     }
   };
 
+  game.onGameOver = async (score) => {
+    let userInfo = null;
+    let saveError = false;
+    let fetchError = false;
+
+    try {
+      userInfo = await getUserInfo();
+    } catch {
+      // not signed in or network issue; skip save entirely
+    }
+
+    if (userInfo) {
+      try {
+        await addScore(userInfo.id, score, currentVideoTitle);
+      } catch (err) {
+        console.error('[leaderboard] save failed', err);
+        saveError = true;
+      }
+    }
+
+    let entries: LeaderboardEntry[] = [];
+    if (userInfo) {
+      try {
+        entries = await getTopScores(userInfo.id);
+      } catch (err) {
+        console.error('[leaderboard] fetch failed', err);
+        fetchError = true;
+      }
+    }
+
+    let errorMessage: string | undefined;
+    if (fetchError) {
+      errorMessage = "Couldn't reach the leaderboard — no connection. Play another game!";
+    } else if (saveError) {
+      errorMessage = "Score couldn't be saved — no connection. The leaderboard may be out of date.";
+    }
+
+    leaderboardCleanup = showLeaderboard(
+      gameContainer,
+      userInfo?.name ?? 'Your',
+      entries,
+      () => { leaderboardCleanup = null; },
+      errorMessage,
+    );
+  };
+
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.code === 'KeyR' && leaderboardCleanup) {
+      leaderboardCleanup();
+      leaderboardCleanup = null;
+    }
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
     if (game.getState().phase === 'playing') {
@@ -304,6 +361,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let speedIndex = 1;
 
   function mountVideo(video: YouTubeVideo): void {
+    currentVideoTitle = video.title;
     ytPlayer?.destroy();
     clearProgress();
     dragController?.abort();

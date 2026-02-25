@@ -50,3 +50,15 @@ export interface YouTubeVideo {
 }
 
 export type AppPhase = 'pregame' | 'playing';
+
+export interface UserInfo {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface LeaderboardEntry {
+  score: number;
+  videoTitle: string;
+  playedAt: Date;
+}
