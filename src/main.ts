@@ -303,7 +303,9 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     }
 
     let errorMessage: string | undefined;
-    if (fetchError) {
+    if (!userInfo) {
+      errorMessage = 'Sign in with Google to save and track your scores.';
+    } else if (fetchError) {
       errorMessage = "Couldn't reach the leaderboard — no connection. Play another game!";
     } else if (saveError) {
       errorMessage = "Score couldn't be saved — no connection. The leaderboard may be out of date.";
@@ -311,7 +313,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
     leaderboardCleanup = showLeaderboard(
       gameContainer,
-      userInfo?.name ?? 'Your',
+      userInfo?.name ?? null,
       entries,
       () => { leaderboardCleanup = null; },
       errorMessage,

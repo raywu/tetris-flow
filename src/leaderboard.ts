@@ -10,7 +10,7 @@ function escapeHtml(str: string): string {
 
 export function showLeaderboard(
   gameContainer: HTMLElement,
-  userName: string,
+  userName: string | null,
   entries: LeaderboardEntry[],
   onDismiss: () => void,
   errorMessage?: string,
@@ -23,7 +23,7 @@ export function showLeaderboard(
 
   const title = document.createElement('span');
   title.className = 'leaderboard-title';
-  title.textContent = `${userName}'s Leaderboard`;
+  title.textContent = userName ? `${userName}'s Leaderboard` : 'Leaderboard';
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'panel-collapse';

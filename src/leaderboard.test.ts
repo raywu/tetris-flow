@@ -29,10 +29,16 @@ describe('showLeaderboard', () => {
     expect(container.lastElementChild?.classList.contains('leaderboard-panel')).toBe(true);
   });
 
-  it('title contains userName', () => {
+  it('title contains userName when provided', () => {
     showLeaderboard(container, 'Alice', [], () => {});
     const header = container.querySelector('.leaderboard-header')!;
     expect(header.textContent).toContain('Alice');
+  });
+
+  it('title is "Leaderboard" when userName is null', () => {
+    showLeaderboard(container, null, [], () => {});
+    const title = container.querySelector('.leaderboard-title')!;
+    expect(title.textContent).toBe('Leaderboard');
   });
 
   it('renders 10 rows when 10 entries provided', () => {

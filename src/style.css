@@ -586,7 +586,7 @@ body.selector-open { align-items: flex-start; }
 
 .lb-error {
   text-align: center;
-  color: #ff6b6b;
+  color: var(--text-dim);
   font-size: 0.82rem;
   padding: 24px 0;
 }
