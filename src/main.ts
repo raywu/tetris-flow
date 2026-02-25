@@ -83,6 +83,7 @@ function buildGameDOM(): {
       <span>SPC  Hard drop</span>
       <span>P/ESC  Pause</span>
       <span>R    Restart</span>
+      <span>L  Leaderboard</span>
     </div>
   `;
 
@@ -158,6 +159,12 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   const previewCanvas = wrapper.querySelector<HTMLCanvasElement>('#preview')!;
   const game = new Game(boardCanvas, previewCanvas, scoreEl, levelEl, linesEl, overlay);
 
+  type GamePhase = 'playing' | 'paused' | 'gameover';
+  let gamePhase: GamePhase = 'playing';
+
+  interface LbSnapshot { userName: string | null; entries: LeaderboardEntry[]; errorMessage?: string; }
+  let lastLbSnapshot: LbSnapshot | null = null;
+
   let ytPlayer: YouTubePlayer | null = null;
   let progressInterval: ReturnType<typeof setInterval> | null = null;
   let miniBar: HTMLElement | null = null;
@@ -187,6 +194,34 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       if (fill) fill.style.width = `${pct}%`;
       if (timeEl) timeEl.textContent = `${formatTime(prog.current)} / ${formatTime(prog.duration)}`;
     }, 1000);
+  }
+
+  async function openLeaderboard(): Promise<void> {
+    if (leaderboardCleanup) return;
+    if (gamePhase === 'playing') {
+      suppressSelector = true;
+      game.pause();
+      suppressSelector = false;
+    }
+    let data: LbSnapshot;
+    if (gamePhase === 'gameover' && lastLbSnapshot) {
+      data = lastLbSnapshot;
+    } else {
+      let userInfo = null, entries: LeaderboardEntry[] = [], errorMessage: string | undefined;
+      try { userInfo = await getUserInfo(); } catch {}
+      if (userInfo) {
+        try { entries = await getTopScores(userInfo.id); }
+        catch { errorMessage = "Couldn't reach the leaderboard."; }
+      } else {
+        errorMessage = 'Sign in with Google to save and track your scores.';
+      }
+      data = { userName: userInfo?.name ?? null, entries, errorMessage };
+    }
+    leaderboardCleanup = showLeaderboard(
+      data.userName, data.entries,
+      () => { leaderboardCleanup = null; },
+      data.errorMessage,
+    );
   }
 
   function openVideoSelector(): void {
@@ -243,6 +278,11 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.code !== 'Escape') return;
+    if (leaderboardCleanup) {
+      leaderboardCleanup();
+      leaderboardCleanup = null;
+      return;
+    }
     if (modalCleanup) {
       modalCleanup();
       game.resume();
@@ -256,6 +296,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let suppressSelector = false;
 
   game.onPauseChange = (paused) => {
+    gamePhase = paused ? 'paused' : 'playing';
     if (paused) {
       if (ytPlayer && !ytPlayer.isPaused()) {
         ytPlayer.pause();
@@ -273,6 +314,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   };
 
   game.onGameOver = async (score) => {
+    gamePhase = 'gameover';
+
     let userInfo = null;
     let saveError = false;
     let fetchError = false;
@@ -311,19 +354,24 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       errorMessage = "Score couldn't be saved — no connection. The leaderboard may be out of date.";
     }
 
-    leaderboardCleanup = showLeaderboard(
-      gameContainer,
-      userInfo?.name ?? null,
-      entries,
-      () => { leaderboardCleanup = null; },
-      errorMessage,
-    );
+    lastLbSnapshot = { userName: userInfo?.name ?? null, entries, errorMessage };
+
+    overlay.querySelector('.overlay-btn')?.remove();
+    const lbBtn = document.createElement('button');
+    lbBtn.className = 'overlay-btn';
+    lbBtn.textContent = 'L  LEADERBOARD';
+    overlay.appendChild(lbBtn);
+    lbBtn.addEventListener('click', openLeaderboard);
   };
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.code === 'KeyR' && leaderboardCleanup) {
-      leaderboardCleanup();
-      leaderboardCleanup = null;
+    if (e.code === 'KeyR') {
+      leaderboardCleanup?.(); leaderboardCleanup = null;
+      lastLbSnapshot = null;
+    }
+    if (e.code === 'KeyL') {
+      if (leaderboardCleanup) { leaderboardCleanup(); leaderboardCleanup = null; }
+      else { openLeaderboard(); }
     }
   });
 

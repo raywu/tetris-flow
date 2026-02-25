@@ -9,14 +9,16 @@ function escapeHtml(str: string): string {
 }
 
 export function showLeaderboard(
-  gameContainer: HTMLElement,
   userName: string | null,
   entries: LeaderboardEntry[],
   onDismiss: () => void,
   errorMessage?: string,
 ): () => void {
-  const panel = document.createElement('div');
-  panel.className = 'leaderboard-panel';
+  const backdrop = document.createElement('div');
+  backdrop.className = 'leaderboard-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'leaderboard-modal';
 
   const header = document.createElement('div');
   header.className = 'leaderboard-header';
@@ -31,7 +33,7 @@ export function showLeaderboard(
 
   header.appendChild(title);
   header.appendChild(closeBtn);
-  panel.appendChild(header);
+  modal.appendChild(header);
 
   const body = document.createElement('div');
   body.className = 'leaderboard-body';
@@ -70,13 +72,12 @@ export function showLeaderboard(
     body.appendChild(table);
   }
 
-  panel.appendChild(body);
-  gameContainer.appendChild(panel);
-  document.body.classList.add('selector-open');
+  modal.appendChild(body);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
 
   function cleanup(): void {
-    panel.remove();
-    document.body.classList.remove('selector-open');
+    backdrop.remove();
     onDismiss();
   }
 

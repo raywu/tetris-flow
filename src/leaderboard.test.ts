@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { showLeaderboard } from './leaderboard.ts';
 import type { LeaderboardEntry } from './types.ts';
 
@@ -12,86 +12,78 @@ function makeEntries(n: number): LeaderboardEntry[] {
 }
 
 describe('showLeaderboard', () => {
-  let container: HTMLDivElement;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-  });
-
   afterEach(() => {
-    container.remove();
+    document.body.querySelector('.leaderboard-backdrop')?.remove();
     document.body.classList.remove('selector-open');
   });
 
-  it('appends .leaderboard-panel to gameContainer', () => {
-    showLeaderboard(container, 'Alice', [], () => {});
-    expect(container.lastElementChild?.classList.contains('leaderboard-panel')).toBe(true);
+  it('appends .leaderboard-backdrop to document.body', () => {
+    showLeaderboard('Alice', [], () => {});
+    expect(document.body.querySelector('.leaderboard-backdrop')).not.toBeNull();
+  });
+
+  it('contains .leaderboard-modal inside backdrop', () => {
+    showLeaderboard('Alice', [], () => {});
+    const modal = document.body.querySelector('.leaderboard-backdrop .leaderboard-modal');
+    expect(modal).not.toBeNull();
   });
 
   it('title contains userName when provided', () => {
-    showLeaderboard(container, 'Alice', [], () => {});
-    const header = container.querySelector('.leaderboard-header')!;
-    expect(header.textContent).toContain('Alice');
+    showLeaderboard('Alice', [], () => {});
+    expect(document.body.querySelector('.leaderboard-title')!.textContent).toContain('Alice');
   });
 
   it('title is "Leaderboard" when userName is null', () => {
-    showLeaderboard(container, null, [], () => {});
-    const title = container.querySelector('.leaderboard-title')!;
-    expect(title.textContent).toBe('Leaderboard');
+    showLeaderboard(null, [], () => {});
+    expect(document.body.querySelector('.leaderboard-title')!.textContent).toBe('Leaderboard');
   });
 
   it('renders 10 rows when 10 entries provided', () => {
-    showLeaderboard(container, 'Alice', makeEntries(10), () => {});
-    expect(container.querySelectorAll('tbody tr').length).toBe(10);
+    showLeaderboard('Alice', makeEntries(10), () => {});
+    expect(document.body.querySelectorAll('tbody tr').length).toBe(10);
   });
 
   it('renders "No scores yet." when entries is empty', () => {
-    showLeaderboard(container, 'Alice', [], () => {});
-    expect(container.querySelector('table')).toBeNull();
-    expect(container.querySelector('.lb-empty')?.textContent).toBe('No scores yet.');
+    showLeaderboard('Alice', [], () => {});
+    expect(document.body.querySelector('table')).toBeNull();
+    expect(document.body.querySelector('.lb-empty')?.textContent).toBe('No scores yet.');
   });
 
   it('renders .lb-error when errorMessage is provided', () => {
-    showLeaderboard(container, 'Alice', [], () => {}, 'Connection failed');
-    expect(container.querySelector('table')).toBeNull();
-    expect(container.querySelector('.lb-error')?.textContent).toBe('Connection failed');
+    showLeaderboard('Alice', [], () => {}, 'Connection failed');
+    expect(document.body.querySelector('table')).toBeNull();
+    expect(document.body.querySelector('.lb-error')?.textContent).toBe('Connection failed');
   });
 
   it('formats score with toLocaleString()', () => {
-    showLeaderboard(container, 'Alice', [{ score: 1000, videoTitle: 'T', playedAt: new Date() }], () => {});
-    const scoreCell = container.querySelector('.lb-score')!;
-    expect(scoreCell.textContent).toBe((1000).toLocaleString());
+    showLeaderboard('Alice', [{ score: 1000, videoTitle: 'T', playedAt: new Date() }], () => {});
+    expect(document.body.querySelector('.lb-score')!.textContent).toBe((1000).toLocaleString());
   });
 
-  it('close button calls onDismiss and removes panel', () => {
+  it('close button calls onDismiss and removes backdrop', () => {
     const onDismiss = vi.fn();
-    showLeaderboard(container, 'Alice', [], onDismiss);
-    const btn = container.querySelector<HTMLButtonElement>('.panel-collapse')!;
-    btn.click();
+    showLeaderboard('Alice', [], onDismiss);
+    document.body.querySelector<HTMLButtonElement>('.panel-collapse')!.click();
     expect(onDismiss).toHaveBeenCalledOnce();
-    expect(container.querySelector('.leaderboard-panel')).toBeNull();
+    expect(document.body.querySelector('.leaderboard-backdrop')).toBeNull();
   });
 
-  it('returned cleanup fn removes panel and calls onDismiss', () => {
+  it('returned cleanup fn removes backdrop and calls onDismiss', () => {
     const onDismiss = vi.fn();
-    const cleanup = showLeaderboard(container, 'Alice', [], onDismiss);
+    const cleanup = showLeaderboard('Alice', [], onDismiss);
     cleanup();
     expect(onDismiss).toHaveBeenCalledOnce();
-    expect(container.querySelector('.leaderboard-panel')).toBeNull();
+    expect(document.body.querySelector('.leaderboard-backdrop')).toBeNull();
   });
 
-  it('adds selector-open on mount, removes on dismiss', () => {
-    const cleanup = showLeaderboard(container, 'Alice', [], () => {});
-    expect(document.body.classList.contains('selector-open')).toBe(true);
-    cleanup();
+  it('does NOT add selector-open class to body', () => {
+    showLeaderboard('Alice', [], () => {});
     expect(document.body.classList.contains('selector-open')).toBe(false);
   });
 
   it('HTML-escapes videoTitle', () => {
-    const malicious = '<script>alert(1)</script>';
-    showLeaderboard(container, 'Alice', [{ score: 1, videoTitle: malicious, playedAt: new Date() }], () => {});
-    const cell = container.querySelector('.lb-video')!;
+    showLeaderboard('Alice', [{ score: 1, videoTitle: '<script>alert(1)</script>', playedAt: new Date() }], () => {});
+    const cell = document.body.querySelector('.lb-video')!;
     expect(cell.innerHTML).not.toContain('<script>');
     expect(cell.textContent).toContain('alert(1)');
   });
