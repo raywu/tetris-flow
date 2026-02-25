@@ -163,7 +163,7 @@ Because the app lives at the root of `tetris.raywu.org`, the default Vite `base:
 
 ## Continuous deployment
 
-Once connected, Vercel deploys automatically on every push to `main`. The `npm run build` script runs `vitest run && tsc && vite build`, so failing tests or type errors will abort the deploy — a useful safety net.
+Once connected, Vercel deploys automatically on every push to `master`. The `npm run build` script runs `vitest run && tsc && vite build`, so failing tests or type errors will abort the deploy — a useful safety net.
 
 To deploy a preview of a feature branch: push the branch to GitHub; Vercel creates a unique preview URL automatically.
 

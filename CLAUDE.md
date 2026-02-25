@@ -88,7 +88,7 @@ Firestore in Native mode. Collection: `scores/{userId}/entries`. Per-user top-10
 
 ## Deployment
 
-Vercel (free tier), auto-deploys on push to `master`. Live at `https://tetris.raywu.org`. CNAME from registrar. Full setup: `docs/hosting-strategy.md`.
+Vercel (free tier) via GitHub integration — push to `master` triggers build + deploy automatically. No Vercel CLI needed. Live at `https://tetris.raywu.org`. CNAME from registrar. Full setup: `docs/hosting-strategy.md`.
 
 ## Testing
 
