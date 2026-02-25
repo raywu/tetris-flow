@@ -1,6 +1,6 @@
 # Optimization Plan
 
-~~Eight~~ One focused commit remains (commits 1, 2, 3, 4, 5, 6, 7, and 8 have already shipped). Each commit is self-contained — they can land in order or individually.
+All commits have shipped.
 
 ---
 
@@ -64,18 +64,9 @@
 
 ## Area 6: Firebase error handling
 
-### Commit 9 (optional) — Friendly errors for Firestore failures
+### ~~Commit 9 (optional) — Friendly errors for Firestore failures~~ ✓ Done
 
-**Problem:** `addScore` and `getTopScores` failures in `main.ts` surface as hardcoded
-strings that don't distinguish between network errors and quota/permission issues. The
-same `friendlyError()` pattern from commit 8 could be applied here.
-
-**Approach:** Extend `friendlyError()` in `pregame.ts` (or extract to a shared util) to
-handle Firebase error codes (`permission-denied`, `unavailable`, etc.) and apply at the
-two call sites in `onGameOver`.
-
-**Files changed:**
-- `src/main.ts` — apply `friendlyError()` to `addScore`/`getTopScores` catch blocks
+~~Shipped in commit `ab1e00c fix: friendly Firestore error messages; mark optimization commits done`.~~
 
 ---
 
@@ -91,6 +82,6 @@ two call sites in `onGameOver`.
 | ~~6~~ | ~~UX~~ | ~~`fix: persist playback speed across video changes`~~ | ✓ Done |
 | ~~7~~ | ~~UX~~ | ~~`feat: restore recommendations when search is cleared`~~ | ✓ Done |
 | ~~8~~ | ~~Errors~~ | ~~`fix: sanitize and map API errors to friendly messages`~~ | ✓ Done |
-| 9 (opt) | Firebase errors | `fix: friendly error messages for Firestore failures` | Pending |
+| ~~9 (opt)~~ | ~~Firebase errors~~ | ~~`fix: friendly error messages for Firestore failures`~~ | ✓ Done |
 
-Commit 9 is the only remaining item — optional, low urgency.
+All 9 commits have shipped.
