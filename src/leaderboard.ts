@@ -29,7 +29,7 @@ export function showLeaderboard(
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'panel-collapse';
-  closeBtn.textContent = '^';
+  closeBtn.textContent = '×';
 
   header.appendChild(title);
   header.appendChild(closeBtn);
