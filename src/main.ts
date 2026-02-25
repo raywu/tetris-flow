@@ -146,6 +146,15 @@ function buildMiniPlayer(video: YouTubeVideo): {
   };
 }
 
+function firestoreError(err: unknown): string {
+  const code = (err as any)?.code as string | undefined;
+  if (code === 'unavailable') return "Couldn't reach the leaderboard — check your connection.";
+  if (code === 'permission-denied') return 'Leaderboard access denied — Firebase rules may need updating.';
+  if (code === 'unauthenticated') return 'Session expired — sign in again to save scores.';
+  if (code === 'resource-exhausted') return 'Leaderboard quota reached. Try again later.';
+  return 'Leaderboard error. Your score may not have been saved.';
+}
+
 function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[]): void {
   app.innerHTML = '';
 
@@ -317,8 +326,8 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
     gamePhase = 'gameover';
 
     let userInfo = null;
-    let saveError = false;
-    let fetchError = false;
+    let saveErrorMsg: string | null = null;
+    let fetchErrorMsg: string | null = null;
 
     try {
       userInfo = await getUserInfo();
@@ -331,7 +340,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
         await addScore(userInfo.id, score, currentVideoTitle);
       } catch (err) {
         console.error('[leaderboard] save failed', err);
-        saveError = true;
+        saveErrorMsg = firestoreError(err);
       }
     }
 
@@ -341,17 +350,17 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
         entries = await getTopScores(userInfo.id);
       } catch (err) {
         console.error('[leaderboard] fetch failed', err);
-        fetchError = true;
+        fetchErrorMsg = firestoreError(err);
       }
     }
 
     let errorMessage: string | undefined;
     if (!userInfo) {
       errorMessage = 'Sign in with Google to save and track your scores.';
-    } else if (fetchError) {
-      errorMessage = "Couldn't reach the leaderboard — no connection. Play another game!";
-    } else if (saveError) {
-      errorMessage = "Score couldn't be saved — no connection. The leaderboard may be out of date.";
+    } else if (fetchErrorMsg) {
+      errorMessage = fetchErrorMsg;
+    } else if (saveErrorMsg) {
+      errorMessage = saveErrorMsg;
     }
 
     lastLbSnapshot = { userName: userInfo?.name ?? null, entries, errorMessage };

@@ -1,6 +1,6 @@
 # Optimization Plan
 
-~~Eight~~ Six focused commits across the five areas identified (commits 1, 3, and 8 have already shipped). Each commit is self-contained — they can land in order or individually.
+~~Eight~~ One focused commit remains (commits 1, 2, 3, 4, 5, 6, 7, and 8 have already shipped). Each commit is self-contained — they can land in order or individually.
 
 ---
 
@@ -12,75 +12,45 @@
 
 ---
 
-### Commit 2 — Script load timeouts
+### ~~Commit 2 — Script load timeouts~~ ✓ Done
 
-**Problem:** `loadYTApi()` (`player.ts`) and `loadGISScript()` (`auth.ts`) wait indefinitely. On a slow or blocked network, the app hangs with no feedback — no spinner timeout, no error, no fallback.
-
-**Approach:** Wrap each script load promise in a `Promise.race` against a `setTimeout` reject (10 seconds). On timeout, reject with a descriptive error so the caller's existing error handler surfaces it.
-
-**Files changed:**
-- `src/player.ts` — race `loadYTApi()` against 10s timeout
-- `src/auth.ts` — race `loadGISScript()` against 10s timeout
+~~`loadYTApi()` (`player.ts`) and `loadGISScript()` (`auth.ts`) each wrap their script load in a `Promise.race` against a 10-second `setTimeout` reject.~~
 
 ---
 
 ## Area 2: Cleanup / memory
 
-### ~~Commit 3 — Fix debounce leak on pregame unmount and add page unload stop~~ ✓ Partially done
+### ~~Commit 3 — Fix debounce leak on pregame unmount and add page unload stop~~ ✓ Done
 
-~~`pagehide` → `game.stop()` is wired in `main.ts:504`.~~ The debounce cancel in `pregame.ts` has **not** been done and remains outstanding — promote to a standalone fix if desired.
+~~`pagehide` → `game.stop()` is wired in `main.ts`. `debounceTimer` is an instance field in `pregame.ts`; `unmount()` calls `clearTimeout(this.debounceTimer)` and nulls it.~~
 
 ---
 
 ## Area 3: Quota management
 
-### Commit 4 — Clear search cache on client switch
+### ~~Commit 4 — Clear search cache on client switch~~ ✓ Done
 
-**Problem:** `switchClientId()` in `auth.ts:39-40` clears `yt_recommendations` and `yt_subscriptions` from localStorage, but leaves all `yt_search_${query}` entries in sessionStorage. After switching to a second account, stale search results from account 1 are returned immediately from cache.
-
-**Approach:** In `switchClientId()`, iterate `sessionStorage` keys and remove any starting with `yt_search_`.
-
-**Files changed:**
-- `src/auth.ts` — clear search keys from sessionStorage in `switchClientId()`
+~~`switchClientId()` in `auth.ts` iterates sessionStorage and removes all keys starting with `yt_search_`.~~
 
 ---
 
-### Commit 5 — Paginate subscriptions past the first 50
+### ~~Commit 5 — Paginate subscriptions past the first 50~~ ✓ Done
 
-**Problem:** `fetchSubscriptions()` hardcodes `maxResults: '50'`. The YouTube API caps a single page at 50 results. Users with more than 50 subscriptions silently get an incomplete set, biasing recommendations toward their first 50 channels.
-
-**Approach:** Follow `nextPageToken` in a loop until exhausted or a configurable cap (e.g. 200 = 4 pages × ~1 quota unit each). Add a `MAX_SUBSCRIPTION_PAGES` constant to `constants.ts`.
-
-**Files changed:**
-- `src/youtube.ts` — loop on `nextPageToken` in `fetchSubscriptions()`
-- `src/constants.ts` — add `MAX_SUBSCRIPTION_PAGES = 4`
+~~`fetchSubscriptions()` in `youtube.ts` loops on `nextPageToken` up to `MAX_SUBSCRIPTION_PAGES` (= 4, defined in `constants.ts`).~~
 
 ---
 
 ## Area 4: UX polish
 
-### Commit 6 — Persist playback speed across video changes
+### ~~Commit 6 — Persist playback speed across video changes~~ ✓ Done
 
-**Problem:** `speedIndex` is declared inside `mountVideo()` (`main.ts:315`) and resets to `1` (1×) on every call. A user who sets 1.5× for a lecture must re-set it after every video skip.
-
-**Approach:** Lift `speedIndex` to `startGame()` scope (alongside `videoList`, `currentVideoId`, etc.) so it survives across `mountVideo()` calls. `mountVideo()` reads the current `speedIndex` on init and applies it immediately after player is ready.
-
-**Files changed:**
-- `src/main.ts` — hoist `speedIndex` to `startGame()` scope; apply in player `onReady` callback
+~~`speedIndex` is declared at `startGame()` scope in `main.ts` and applied via `ytPlayer?.setPlaybackRate(SPEED_RATES[speedIndex])` in the player `onReady` callback.~~
 
 ---
 
-### Commit 7 — "Back to recommendations" after search
+### ~~Commit 7 — "Back to recommendations" after search~~ ✓ Done
 
-**Problem:** Once a user searches, `this.videos` is replaced with search results. The only way back to recommendations is the ↺ refresh button, which isn't labeled clearly and re-triggers a loading state (even if cache is warm). There is no "clear search" affordance.
-
-**Approach:**
-- Save the pre-search recommendations to `this.recommendedVideos` before overwriting `this.videos` in `handleSearch()`.
-- When the search input is cleared (empty string), restore `this.videos` from `this.recommendedVideos` and re-render without an API call.
-- Add a small "✕ Clear search" control next to the search input when results are showing.
-
-**Files changed:**
-- `src/pregame.ts` — `recommendedVideos` instance field; restore on clear; clear-search button in `buildHTML()`
+~~`pregame.ts` stores `recommendedVideos` as an instance field. `handleSearch('')` (triggered by clearing the input via debounce) restores `this.videos = this.recommendedVideos` and re-renders without an API call.~~ (Note: an explicit "✕ Clear search" button in `buildHTML()` was not confirmed; clearing the input is sufficient and fully functional.)
 
 ---
 
@@ -114,13 +84,13 @@ two call sites in `onGameOver`.
 | # | Area | Commit message (draft) | Status |
 |---|---|---|---|
 | ~~1~~ | ~~API resilience~~ | ~~`fix: refresh token on 401 for all YouTube API calls`~~ | ✓ Done |
-| 2 | API resilience | `fix: add 10s timeout to GIS and YouTube iframe API script loads` | Pending |
-| ~~3~~ | ~~Cleanup~~ | ~~`fix: cancel search debounce on pregame unmount; stop RAF on pagehide`~~ | ✓ Partial (pagehide done; debounce cancel outstanding) |
-| 4 | Quota | `fix: clear search cache from sessionStorage on client switch` | Pending |
-| 5 | Quota | `feat: paginate subscriptions beyond first 50` | Pending |
-| 6 | UX | `fix: persist playback speed across video changes` | Pending |
-| 7 | UX | `feat: restore recommendations when search is cleared` | Pending |
+| ~~2~~ | ~~API resilience~~ | ~~`fix: add 10s timeout to GIS and YouTube iframe API script loads`~~ | ✓ Done |
+| ~~3~~ | ~~Cleanup~~ | ~~`fix: cancel search debounce on pregame unmount; stop RAF on pagehide`~~ | ✓ Done |
+| ~~4~~ | ~~Quota~~ | ~~`fix: clear search cache from sessionStorage on client switch`~~ | ✓ Done |
+| ~~5~~ | ~~Quota~~ | ~~`feat: paginate subscriptions beyond first 50`~~ | ✓ Done |
+| ~~6~~ | ~~UX~~ | ~~`fix: persist playback speed across video changes`~~ | ✓ Done |
+| ~~7~~ | ~~UX~~ | ~~`feat: restore recommendations when search is cleared`~~ | ✓ Done |
 | ~~8~~ | ~~Errors~~ | ~~`fix: sanitize and map API errors to friendly messages`~~ | ✓ Done |
 | 9 (opt) | Firebase errors | `fix: friendly error messages for Firestore failures` | Pending |
 
-Commits 2 and 4 are pure fixes with no visible behavior changes for the happy path. Commits 5–7 have visible UX impact and should get a quick smoke-test after each.
+Commit 9 is the only remaining item — optional, low urgency.
