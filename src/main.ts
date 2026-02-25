@@ -4,8 +4,10 @@ import { DEBUG } from './constants.ts';
 import { PreGameScreen } from './pregame.ts';
 import { YouTubePlayer } from './player.ts';
 import { getVideoRating, rateVideo } from './youtube.ts';
-import { getToken, withTokenRefresh } from './auth.ts';
-import type { YouTubeVideo } from './types.ts';
+import { getToken, withTokenRefresh, getUserInfo } from './auth.ts';
+import { addScore, getTopScores } from './firebase.ts';
+import { showLeaderboard } from './leaderboard.ts';
+import type { YouTubeVideo, LeaderboardEntry } from './types.ts';
 
 if ((import.meta as any).env.DEV) {
   import('./debug.ts').then(({ mountDebugOverlay }) => mountDebugOverlay());
@@ -81,6 +83,7 @@ function buildGameDOM(): {
       <span>SPC  Hard drop</span>
       <span>P/ESC  Pause</span>
       <span>R    Restart</span>
+      <span>L  Leaderboard</span>
     </div>
   `;
 
@@ -156,14 +159,22 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   const previewCanvas = wrapper.querySelector<HTMLCanvasElement>('#preview')!;
   const game = new Game(boardCanvas, previewCanvas, scoreEl, levelEl, linesEl, overlay);
 
+  type GamePhase = 'playing' | 'paused' | 'gameover';
+  let gamePhase: GamePhase = 'playing';
+
+  interface LbSnapshot { userName: string | null; entries: LeaderboardEntry[]; errorMessage?: string; }
+  let lastLbSnapshot: LbSnapshot | null = null;
+
   let ytPlayer: YouTubePlayer | null = null;
   let progressInterval: ReturnType<typeof setInterval> | null = null;
   let miniBar: HTMLElement | null = null;
   let dragController: AbortController | null = null;
   let videoList: YouTubeVideo[] = initialList;
   let currentVideoId: string | null = null;
+  let currentVideoTitle = '';
   let audioPausedByGame = false;
   let modalCleanup: (() => void) | null = null;
+  let leaderboardCleanup: (() => void) | null = null;
 
   function clearProgress(): void {
     if (progressInterval !== null) {
@@ -183,6 +194,34 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       if (fill) fill.style.width = `${pct}%`;
       if (timeEl) timeEl.textContent = `${formatTime(prog.current)} / ${formatTime(prog.duration)}`;
     }, 1000);
+  }
+
+  async function openLeaderboard(): Promise<void> {
+    if (leaderboardCleanup) return;
+    if (gamePhase === 'playing') {
+      suppressSelector = true;
+      game.pause();
+      suppressSelector = false;
+    }
+    let data: LbSnapshot;
+    if (gamePhase === 'gameover' && lastLbSnapshot) {
+      data = lastLbSnapshot;
+    } else {
+      let userInfo = null, entries: LeaderboardEntry[] = [], errorMessage: string | undefined;
+      try { userInfo = await getUserInfo(); } catch {}
+      if (userInfo) {
+        try { entries = await getTopScores(userInfo.id); }
+        catch { errorMessage = "Couldn't reach the leaderboard."; }
+      } else {
+        errorMessage = 'Sign in with Google to save and track your scores.';
+      }
+      data = { userName: userInfo?.name ?? null, entries, errorMessage };
+    }
+    leaderboardCleanup = showLeaderboard(
+      data.userName, data.entries,
+      () => { leaderboardCleanup = null; },
+      data.errorMessage,
+    );
   }
 
   function openVideoSelector(): void {
@@ -239,6 +278,11 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.code !== 'Escape') return;
+    if (leaderboardCleanup) {
+      leaderboardCleanup();
+      leaderboardCleanup = null;
+      return;
+    }
     if (modalCleanup) {
       modalCleanup();
       game.resume();
@@ -252,6 +296,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let suppressSelector = false;
 
   game.onPauseChange = (paused) => {
+    gamePhase = paused ? 'paused' : 'playing';
     if (paused) {
       if (ytPlayer && !ytPlayer.isPaused()) {
         ytPlayer.pause();
@@ -267,6 +312,68 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
       modalCleanup = null;
     }
   };
+
+  game.onGameOver = async (score) => {
+    gamePhase = 'gameover';
+
+    let userInfo = null;
+    let saveError = false;
+    let fetchError = false;
+
+    try {
+      userInfo = await getUserInfo();
+    } catch {
+      // not signed in or network issue; skip save entirely
+    }
+
+    if (userInfo) {
+      try {
+        await addScore(userInfo.id, score, currentVideoTitle);
+      } catch (err) {
+        console.error('[leaderboard] save failed', err);
+        saveError = true;
+      }
+    }
+
+    let entries: LeaderboardEntry[] = [];
+    if (userInfo) {
+      try {
+        entries = await getTopScores(userInfo.id);
+      } catch (err) {
+        console.error('[leaderboard] fetch failed', err);
+        fetchError = true;
+      }
+    }
+
+    let errorMessage: string | undefined;
+    if (!userInfo) {
+      errorMessage = 'Sign in with Google to save and track your scores.';
+    } else if (fetchError) {
+      errorMessage = "Couldn't reach the leaderboard — no connection. Play another game!";
+    } else if (saveError) {
+      errorMessage = "Score couldn't be saved — no connection. The leaderboard may be out of date.";
+    }
+
+    lastLbSnapshot = { userName: userInfo?.name ?? null, entries, errorMessage };
+
+    overlay.querySelector('.overlay-btn')?.remove();
+    const lbBtn = document.createElement('button');
+    lbBtn.className = 'overlay-btn';
+    lbBtn.textContent = 'L  LEADERBOARD';
+    overlay.appendChild(lbBtn);
+    lbBtn.addEventListener('click', openLeaderboard);
+  };
+
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.code === 'KeyR') {
+      leaderboardCleanup?.(); leaderboardCleanup = null;
+      lastLbSnapshot = null;
+    }
+    if (e.code === 'KeyL') {
+      if (leaderboardCleanup) { leaderboardCleanup(); leaderboardCleanup = null; }
+      else { openLeaderboard(); }
+    }
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
@@ -304,6 +411,7 @@ function startGame(initialVideo: YouTubeVideo | null, initialList: YouTubeVideo[
   let speedIndex = 1;
 
   function mountVideo(video: YouTubeVideo): void {
+    currentVideoTitle = video.title;
     ytPlayer?.destroy();
     clearProgress();
     dragController?.abort();

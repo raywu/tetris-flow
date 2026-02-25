@@ -1,5 +1,9 @@
+import { getCached, setCached } from './cache.ts';
+import type { UserInfo } from './types.ts';
+
 const SESSION_KEY = 'yt_token';
 const ACTIVE_CLIENT_KEY = 'yt_active_client';
+const USERINFO_KEY = 'yt_userinfo';
 let token: string | null = null;
 
 function loadGISScript(): Promise<void> {
@@ -40,6 +44,7 @@ export function switchClientId(): void {
   sessionStorage.setItem(ACTIVE_CLIENT_KEY, next);
   token = null;
   sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(USERINFO_KEY);
   localStorage.removeItem('yt_recommendations');
   localStorage.removeItem('yt_subscriptions');
   const searchKeys: string[] = [];
@@ -90,6 +95,24 @@ export function signOut(): void {
     token = null;
   }
   sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(USERINFO_KEY);
+}
+
+export async function getUserInfo(): Promise<UserInfo> {
+  const cached = getCached<UserInfo>(USERINFO_KEY, Infinity, sessionStorage);
+  if (cached) return cached;
+
+  const t = getToken();
+  if (!t) throw new Error('Not signed in');
+
+  const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${t}` },
+  });
+  if (!res.ok) throw new Error(`userinfo ${res.status}`);
+  const data = await res.json();
+  const info: UserInfo = { id: data.id, name: data.name, email: data.email };
+  setCached(USERINFO_KEY, info, sessionStorage);
+  return info;
 }
 
 export function getToken(): string | null {

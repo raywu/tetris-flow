@@ -9,6 +9,7 @@ import { LOCK_DELAY_MS, LOCK_DELAY_MAX_RESETS } from './constants.ts';
 
 export class Game {
   onPauseChange: ((paused: boolean) => void) | null = null;
+  onGameOver: ((score: number) => void) | null = null;
 
   private state!: GameState;
   private bag!: Bag;
@@ -242,6 +243,7 @@ export class Game {
       <span class="overlay-hint">Press R to restart</span>
     `;
     this.overlay.classList.remove('hidden');
+    this.onGameOver?.(this.state.score);
   }
 
   private updateHud(): void {
