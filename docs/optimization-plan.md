@@ -1,21 +1,14 @@
 # Optimization Plan
 
-Eight focused commits across the five areas identified. Each commit is self-contained — they can land in order or individually.
+~~Eight~~ Six focused commits across the five areas identified (commits 1, 3, and 8 have already shipped). Each commit is self-contained — they can land in order or individually.
 
 ---
 
 ## Area 1: YouTube API resilience
 
-### Commit 1 — Token refresh wrapper for all API calls
+### ~~Commit 1 — Token refresh wrapper for all API calls~~ ✓ Done
 
-**Problem:** `refreshToken()` retry is wired up in exactly one place (`main.ts` like button handler). Every other API call — `fetchSubscriptions`, `buildRecommendations`, `searchVideos` — surfaces a raw "YouTube API error 401" to the user if the token expires mid-session.
-
-**Approach:** Add a `withTokenRefresh<T>(fn: (token: string) => Promise<T>): Promise<T>` helper to `auth.ts`. It calls `fn` with the current token, catches any error whose message contains `401`, refreshes once, and retries. All call sites swap to using this wrapper.
-
-**Files changed:**
-- `src/auth.ts` — add and export `withTokenRefresh`
-- `src/pregame.ts` — wrap `fetchSubscriptions` and `buildRecommendations` calls
-- `src/main.ts` — replace the manual retry on the like button with `withTokenRefresh`; add it to `getVideoRating` call
+~~`withTokenRefresh` exported from `auth.ts`, applied at all call sites in `main.ts` and `pregame.ts`.~~
 
 ---
 
@@ -33,19 +26,9 @@ Eight focused commits across the five areas identified. Each commit is self-cont
 
 ## Area 2: Cleanup / memory
 
-### Commit 3 — Fix debounce leak on pregame unmount and add page unload stop
+### ~~Commit 3 — Fix debounce leak on pregame unmount and add page unload stop~~ ✓ Partially done
 
-**Problem 1:** The search debounce `setTimeout` in `pregame.ts:170` is allocated in `attachListeners()`. When `unmount()` is called (e.g. user clicks a video), the timeout is not cancelled. If it fires after unmount it calls `handleSearch()` which calls `this.render()` on a detached element — harmless today but will throw once the element is fully removed from any parent.
-
-**Problem 2:** The game's RAF loop (`game.ts`) runs for the entire page lifetime even when the tab is hidden. `stop()` already exists and works; it's just never wired to `visibilitychange` or `pagehide`.
-
-**Approach:**
-- `pregame.ts`: promote `debounce` to an instance field; call `clearTimeout(this.debounce)` in `unmount()`.
-- `main.ts`: listen for `pagehide` (more reliable than `beforeunload` for mobile/bfcache) and call `game.stop()`.
-
-**Files changed:**
-- `src/pregame.ts` — instance-level debounce handle, cleared in `unmount()`
-- `src/main.ts` — `pagehide` → `game.stop()`
+~~`pagehide` → `game.stop()` is wired in `main.ts:504`.~~ The debounce cancel in `pregame.ts` has **not** been done and remains outstanding — promote to a standalone fix if desired.
 
 ---
 
@@ -103,32 +86,41 @@ Eight focused commits across the five areas identified. Each commit is self-cont
 
 ## Area 5: Error message quality
 
-### Commit 8 — Sanitize error messages before display
+### ~~Commit 8 — Sanitize error messages before display~~ ✓ Done
 
-**Problem 1 (XSS):** `pregame.ts:128` renders `this.errorMessage` directly into an `innerHTML` string. `errorMessage` is set from `err.message`, which for YouTube API errors contains the full HTTP response body (JSON with quota codes, endpoint details). A crafted API error containing `<script>` tags would execute.
+~~Shipped in commit `fcbf982 fix: sanitize and map API errors to friendly messages`.~~
 
-**Problem 2 (UX):** Raw messages like `"YouTube API error 403: { code: 403, message: 'quotaExceeded', ... }"` are unhelpful and expose internals.
+---
 
-**Approach:**
-- Add a `friendlyError(err: unknown): string` utility function that pattern-matches known conditions (`401` → "Session expired — try signing in again", `403` with `quotaExceeded` → "Daily API quota reached — try again tomorrow", network errors → "Check your connection") with a generic fallback.
-- `buildBody()` uses `textContent` assignment instead of injecting into `innerHTML`, eliminating the XSS vector. Since `buildHTML()` builds a string, escape the message before interpolation using a simple `escapeHtml()` helper.
+## Area 6: Firebase error handling
+
+### Commit 9 (optional) — Friendly errors for Firestore failures
+
+**Problem:** `addScore` and `getTopScores` failures in `main.ts` surface as hardcoded
+strings that don't distinguish between network errors and quota/permission issues. The
+same `friendlyError()` pattern from commit 8 could be applied here.
+
+**Approach:** Extend `friendlyError()` in `pregame.ts` (or extract to a shared util) to
+handle Firebase error codes (`permission-denied`, `unavailable`, etc.) and apply at the
+two call sites in `onGameOver`.
 
 **Files changed:**
-- `src/pregame.ts` — `friendlyError()` mapper, `escapeHtml()` helper, apply to error display
+- `src/main.ts` — apply `friendlyError()` to `addScore`/`getTopScores` catch blocks
 
 ---
 
 ## Commit sequence summary
 
-| # | Area | Commit message (draft) |
-|---|---|---|
-| 1 | API resilience | `fix: refresh token on 401 for all YouTube API calls` |
-| 2 | API resilience | `fix: add 10s timeout to GIS and YouTube iframe API script loads` |
-| 3 | Cleanup | `fix: cancel search debounce on pregame unmount; stop RAF on pagehide` |
-| 4 | Quota | `fix: clear search cache from sessionStorage on client switch` |
-| 5 | Quota | `feat: paginate subscriptions beyond first 50` |
-| 6 | UX | `fix: persist playback speed across video changes` |
-| 7 | UX | `feat: restore recommendations when search is cleared` |
-| 8 | Errors | `fix: sanitize and map API errors to friendly messages` |
+| # | Area | Commit message (draft) | Status |
+|---|---|---|---|
+| ~~1~~ | ~~API resilience~~ | ~~`fix: refresh token on 401 for all YouTube API calls`~~ | ✓ Done |
+| 2 | API resilience | `fix: add 10s timeout to GIS and YouTube iframe API script loads` | Pending |
+| ~~3~~ | ~~Cleanup~~ | ~~`fix: cancel search debounce on pregame unmount; stop RAF on pagehide`~~ | ✓ Partial (pagehide done; debounce cancel outstanding) |
+| 4 | Quota | `fix: clear search cache from sessionStorage on client switch` | Pending |
+| 5 | Quota | `feat: paginate subscriptions beyond first 50` | Pending |
+| 6 | UX | `fix: persist playback speed across video changes` | Pending |
+| 7 | UX | `feat: restore recommendations when search is cleared` | Pending |
+| ~~8~~ | ~~Errors~~ | ~~`fix: sanitize and map API errors to friendly messages`~~ | ✓ Done |
+| 9 (opt) | Firebase errors | `fix: friendly error messages for Firestore failures` | Pending |
 
-Commits 1–4 are pure fixes with no visible behavior changes for the happy path. Commits 5–8 have visible UX impact and should get a quick smoke-test after each.
+Commits 2 and 4 are pure fixes with no visible behavior changes for the happy path. Commits 5–7 have visible UX impact and should get a quick smoke-test after each.
