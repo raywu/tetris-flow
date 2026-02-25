@@ -1,6 +1,6 @@
 import type { YouTubeVideo } from './types.ts';
 import type { Subscription } from './types.ts';
-import { signIn, getToken, withTokenRefresh } from './auth.ts';
+import { signIn, getToken, withTokenRefresh, getUserInfo } from './auth.ts';
 import { fetchSubscriptions, searchVideos } from './youtube.ts';
 import { buildRecommendations } from './recommendations.ts';
 import { getCached, setCached } from './cache.ts';
@@ -195,6 +195,7 @@ export class PreGameScreen {
     this.setState('signing-in');
     try {
       this.token = await signIn();
+      await getUserInfo().catch(() => {});
       this.setState('loading');
       await this.loadRecommendations();
     } catch (err) {

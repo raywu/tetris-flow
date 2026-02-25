@@ -62,7 +62,7 @@ function requestToken(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/youtube.force-ssl',
+      scope: 'profile email https://www.googleapis.com/auth/youtube.force-ssl',
       callback: (response) => {
         if (response.error) {
           reject(new Error(response.error_description ?? response.error));
